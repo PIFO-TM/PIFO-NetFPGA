@@ -36,7 +36,10 @@ def main():
         pkt_out_list.append((pkt, tuser))
         print str(ps) + '\n'
         
-
+    for (pkt_in, tuser_in), (pkt_out, tuser_out) in zip(pkt_in_list, pkt_out_list):
+        print "input  : {} || {} ".format(pkt_in.summary(), tuser_in)
+        print "output : {} || {} ".format(pkt_out.summary(), tuser_out)
+        print ""
 
 if __name__ == "__main__":
     main()
