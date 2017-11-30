@@ -1,7 +1,8 @@
 
 import sys, os
 from scapy.all import *
-from hwsim_utils import *
+import simpy
+from hwsim_utils import HW_sim_object, BRAM, Tuser
 
 SEG_SIZE = 64 # bytes of packet data
 MAX_SEGMENTS = 20
@@ -18,26 +19,43 @@ class Pkt_segment(object):
     def __str__(self):
         return "{{tdata: {}, next_seg: {} }}".format(''.join('{:02x}'.format(ord(c)) for c in self.tdata), self.next_seg)
 
+class Fifo(object):
+    def __init__(self, maxsize):
+        self.maxsize = maxsize
+        self.items = []
+
+    def push(self, item):
+        if len(self.items) < self.maxsize:
+            self.items.append(item)
+        else:
+            print >> sys.stderr, "ERROR: attempted to add to full free list"
+
+    def pop(self):
+        if len(self.items) > 0:
+            item = self.items[0]
+            self.items = self.items[1:]
+            return item
+        else:
+            print >> sys.stderr, "ERROR: attempted to read from empty free list"
+            return None 
+
+    def __str__(self):
+        return str(self.items)
+
 
 class Pkt_storage(HW_sim_object):
-    def __init__(self, env, period, bus_width, axi_in_pipe, axi_out_pipe, ptr_in_pipe, ptr_out_pipe):
+    def __init__(self, env, period, pkt_in_pipe, pkt_out_pipe, ptr_in_pipe, ptr_out_pipe):
         super(Pkt_storage, self).__init__(env, period)
-        self.bus_width = bus_width
 
-        self.START = 0
-        self.FINISH_PKT = 1
-        # state for state machine
-        self.state = self.START
+        # read the incomming pkt and metadata from here
+        self.pkt_in_pipe = pkt_in_pipe
+        # write the outgoing pkt and metadata into here
+        self.pkt_out_pipe = pkt_out_pipe
 
-        # the input packet stream
-        self.axi_in_pipe = axi_in_pipe
-        # the output packet stream
-        self.axi_out_pipe = axi_out_pipe
-
-        # write the head_seg_ptr and meta_ptr into here
-        self.ptr_out_pipe = ptr_out_pipe
-        # read head_seg_ptr and meta_ptr from here
+        # read the incoming head_seg_ptr and metadata_ptr from here
         self.ptr_in_pipe = ptr_in_pipe
+        # write the outgoing head_seg_ptr and metadata_ptr into here
+        self.ptr_out_pipe = ptr_out_pipe
 
         self.segments_r_in_pipe = simpy.Store(env)
         self.segments_r_out_pipe = simpy.Store(env)
@@ -51,123 +69,80 @@ class Pkt_storage(HW_sim_object):
         # maps: metadata ptr --> tuser object
         self.metadata = BRAM(env, period, self.metadata_r_in_pipe, self.metadata_r_out_pipe, self.metadata_w_in_pipe)
 
-        self.seg_fl_r_in_pipe = simpy.Store(env)
-        self.seg_fl_r_out_pipe = simpy.Store(env)
-        self.seg_fl_w_in_pipe = simpy.Store(env)
         # stores ID of free segments
-        self.free_seg_list = FIFO(env, period, self.seg_fl_r_in_pipe, self.seg_fl_r_out_pipe, self.seg_fl_w_in_pipe, maxsize=MAX_SEGMENTS, init_items=range(MAX_SEGMENTS))
-
-        self.meta_fl_r_in_pipe = simpy.Store(env)
-        self.meta_fl_r_out_pipe = simpy.Store(env)
-        self.meta_fl_w_in_pipe = simpy.Store(env)
+        self.free_seg_list = Fifo(MAX_SEGMENTS)
         # stores ID of free tuser blocks
-        self.free_meta_list = FIFO(env, period, self.meta_fl_r_in_pipe, self.meta_fl_r_out_pipe, self.meta_fl_w_in_pipe, maxsize=MAX_PKTS, init_items=range(MAX_PKTS))
+        self.free_meta_list = Fifo(MAX_PKTS)
 
-        # register processes for simulation
+        self.init_free_lists()
+
         self.run()
 
+    """
+    Initialize free lists
+    """
+    def init_free_lists(self):
+        # Add all segments to free_seg_list
+        for i in range(MAX_SEGMENTS):
+            self.free_seg_list.push(i)
+
+        # Add all metadata blocks to free_meta_list
+        for i in range(MAX_PKTS):
+            self.free_meta_list.push(i)
+
     def run(self):
+        """Register the processes with the simulation environment
+        """
         self.env.process(self.insertion_sm())
         self.env.process(self.removal_sm())
 
 
     def insertion_sm(self):
+        """Constantly read the in_pipe and write incomming data into packet storage
+           Items that come out of the in_pipe should be of the form: (scapy pkt, Tuser object)
+           Reads:
+             - self.pkt_in_pipe
+           Writes:
+             - self.ptr_out_pipe
         """
-        State machine to write incoming packets into storage.
-        Writes the following into self.ptr_out_pipe:
-          - ptr to first segment of packet
-          - ptr to metadata for packet
-        """
-        self.state = self.START
         while True:
-            yield self.wait_clock()
-            if (self.state == self.START):
-                yield self.env.process(self.run_start_state())
-            elif (self.state):
-                yield self.env.process(self.run_finish_pkt_state())
-            else:
-                yield self.env.process(self.run_start_state())
+            # wait for a pkt to come in
+            (pkt, tuser) = yield self.pkt_in_pipe.get() 
 
+            # get a free metadata block
+            meta_ptr = self.free_meta_list.pop()
+            # get a free segment
+            cur_seg_ptr = self.free_seg_list.pop()
 
-    def run_start_state(self):
-        """
-        Get free metadata block and free segment
-        Write ptrs to free metadata block and free segment
-        Get first 2 words of packet and write the metadata and segment
-        """
-        # request a free metadata block
-        self.meta_fl_r_in_pipe.put(True)
-        # request a free segment
-        self.seg_fl_r_in_pipe.put(True)
+            head_seg_ptr = cur_seg_ptr
+            # write the head_seg_ptr and meta_ptr so skip list can start insertion ASAP
+            self.ptr_out_pipe.put((head_seg_ptr, meta_ptr))
 
-        # get the free metadata ptr
-        meta_ptr = yield self.meta_fl_r_out_pipe.get()
-        # get the free segments ptr
-        head_seg_ptr = yield self.seg_fl_r_out_pipe.get()
+            # write the metadata block into BRAM
+            self.metadata_w_in_pipe.put((meta_ptr, tuser))
 
-        # write the head_seg_ptr and meta_ptr
-        self.ptr_out_pipe.put((head_seg_ptr, meta_ptr))
-
-        word_count = 0
-        tdata = ''
-        while word_count < 2:
-            msg = yield self.axi_in_pipe.get()
-            if msg.tvalid:
-                word_count += 1
-                tdata += msg.tdata
-                if word_count == 1:
-                    # write the tuser object
-                    self.metadata_w_in_pipe.put((meta_ptr, msg.tuser))
-                elif word_count == 2:
-                    # check if this is the last word of the packet
-                    if msg.tlast == 1:
-                        self.state = self.START
-                        next_seg_ptr = None
-                    else:
-                        self.state = self.FINISH_PKT
-                        # request a free segment
-                        self.seg_fl_r_in_pipe.put(True)
-                        next_seg_ptr = yield self.seg_fl_r_out_pipe.get()
-                    # create first packet segement
-                    pkt_seg = Pkt_segment(tdata, next_seg_ptr)
-                    self.segments_w_in_pipe.put((head_seg_ptr, pkt_seg))    
-
-    def run_finish_pkt_state(self):
-        """
-        Write the remainder of the pkt into segments
-        """
-        pkt_done = False
-        word_count = 0
-        tdata = ''
-
-        # request a free segment
-        self.seg_fl_r_in_pipe.put(True)
-        free_seg_ptr = yield self.seg_fl_r_out_pipe.get()
-        while not pkt_done:
-            msg = yield self.axi_in_pipe.get()
-            if msg.tvalid:
-                word_count += 1
-                tdata += msg.tdata
-                if msg.tlast:
-                    pkt_done = True
-                    self.state = self.START
-                    pkt_seg = Pkt_segment(tdata, None) if word_count == 2 else Pkt_segment(tdata+'\x00'*self.bus_width, None)
-                    self.segments_w_in_pipe.put((free_seg_ptr, pkt_seg))
-                    pkt_done = True
-                elif word_count == 2:
-                    word_count = 0
-                    # request a free segment
-                    self.seg_fl_r_in_pipe.put(True)
-                    next_seg_ptr = yield self.seg_fl_r_out_pipe.get()
-                    pkt_seg = Pkt_segment(tdata, next_seg_ptr)
-                    self.segments_w_in_pipe.put((free_seg_ptr, pkt_seg))
-                    tdata = ''
-                    free_seg_ptr = next_seg_ptr
+            # write the pkt into segments
+            pkt_str = str(pkt)
+            while len(pkt_str) > SEG_SIZE:
+                tdata = pkt_str[0:SEG_SIZE]
+                next_seg_ptr = self.free_seg_list.pop()
+                # create the new segment
+                self.segments_w_in_pipe.put((cur_seg_ptr, Pkt_segment(tdata, next_seg_ptr)))
+                pkt_str = pkt_str[SEG_SIZE:]
+                cur_seg_ptr = next_seg_ptr 
+            tdata = pkt_str
+            next_seg_ptr = None
+            # create the final segment for the packet
+            self.segments_w_in_pipe.put((cur_seg_ptr, Pkt_segment(tdata, next_seg_ptr)))
 
 
     def removal_sm(self):
         """
-        State machine to remove requested pkt and metadata from the storage
+        Receives requests to dequeue pkts and metadata from storage
+        Reads:
+          - self.ptr_in_pipe
+        Writes:
+          - self.pkt_out_pipe
         """
         while True:
             # wait for a read request
@@ -176,35 +151,24 @@ class Pkt_storage(HW_sim_object):
             # read the metadata
             self.metadata_r_in_pipe.put(meta_ptr) # send read request
             tuser = yield self.metadata_r_out_pipe.get() # wait for response
-            self.meta_fl_w_in_pipe.put(meta_ptr) # add meta_ptr to free list
-
+            self.free_meta_list.push(meta_ptr) # add meta_ptr to free list
+   
             # read the packet
-            pkt_buf = ''
+            pkt_str = ''
             cur_seg_ptr = head_seg_ptr
-            while cur_seg_ptr is not None:
-                # read segment
+            while (cur_seg_ptr is not None):
+                # send the read request
                 self.segments_r_in_pipe.put(cur_seg_ptr)
-                pkt_seg = yield self.segments_r_out_pipe.get() # wait for result
-                self.seg_fl_w_in_pipe.put(cur_seg_ptr) # add cur_seg_ptr to free list
+                # wait for response
+                pkt_seg = yield self.segments_r_out_pipe.get()
 
-                # write first word of segment to AXI Stream interface
-                tdata = pkt_seg.tdata[0:self.bus_width]
-                tvalid = 1
-                tkeep = (1<<self.bus_width)-1
-                tlast = 1 if (tuser.pkt_len % SEG_SIZE <= self.bus_width) else 0
-                axi_msg = AXI_S_message(tdata, tvalid, tkeep, tlast, tuser)
-                self.axi_out_pipe.put(axi_msg)
-
-                yield self.wait_clock()
-
-                # write the second word of segment to AXI Stream interface
-                tdata = pkt_seg.tdata[self.bus_width:]
-                tvalid = 1 if (tuser.pkt_len % SEG_SIZE > self.bus_width) else 0
-                tkeep = (1<<self.bus_width)-1
-                tlast = 1 if (tuser.pkt_len % SEG_SIZE > self.bus_width) else 0
-                axi_msg = AXI_S_message(tdata, tvalid, tkeep, tlast, tuser)
-                self.axi_out_pipe.put(axi_msg)               
-
-                # update the segment pointer
+                pkt_str += pkt_seg.tdata
+                # add segment to free list
+                self.free_seg_list.push(cur_seg_ptr)
                 cur_seg_ptr = pkt_seg.next_seg
+    
+            # reconstruct the final scapy packet
+            pkt = Ether(pkt_str)
+            # Write the final pkt and metadata
+            self.pkt_out_pipe.put((pkt, tuser))
 
