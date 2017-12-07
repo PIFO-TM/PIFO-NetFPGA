@@ -237,7 +237,7 @@ class AXI_S_slave(HW_sim_object):
     def read_pkts(self):
         while True:
             msg = yield self.in_pipe.get()
-            print 'slave @ {:03d} msg received : {}'.format(self.env.now, msg)
+            print ('slave @ {:03d} msg received : {}'.format(self.env.now, msg))
 
 
 

@@ -37,7 +37,7 @@ class Fifo(object):
             return item
         else:
             print >> sys.stderr, "ERROR: attempted to read from empty free list"
-            return None 
+            return None
 
     def __str__(self):
         return str(self.items)
