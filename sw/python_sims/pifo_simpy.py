@@ -7,14 +7,13 @@ from statistics import mean
 from hwsim_utils import HW_sim_object, BRAM, Tuser
 from packet_storage_hwsim import Fifo
 
-POS_INF = 2**32 - 1
 NEG_INF = -2**32
-MAX_NODES = 256
-PERIOD = 1
+POS_INF = 2**32 - 1
 
 class SkipList(HW_sim_object):
-    def __init__(self, env, period=PERIOD, size=MAX_NODES):
+    def __init__(self, env, period, size):
         super(SkipList, self).__init__(env, period)
+        self.env = env
         # Process communication pipes
         self.search_in_pipe = simpy.Store(env)
         self.search_out_pipe = simpy.Store(env)
@@ -28,18 +27,17 @@ class SkipList(HW_sim_object):
         self.nodes_w_out_pipe = simpy.Store(env)
 
         # Block RAM for node memory
-        depth = MAX_NODES
+        depth = size
         write_latency = 1
         read_latency = 1
         self.nodes = BRAM(env, period, self.nodes_r_in_pipe, self.nodes_r_out_pipe, self.nodes_w_in_pipe, self.nodes_w_out_pipe,
                           depth, write_latency, read_latency)
         # FIFO for free node list
-        self.free_node_list = Fifo(MAX_NODES)
+        self.free_node_list = Fifo(size)
         # Set current size and max level to zero
         self.numEntries = 0
         self.nodeCount = 0
         self.currMaxLevel = 0
-        self.retNodes = [] # for debugging
 
         # Push all free nodes in free list FIFO
         for addr in range(size):
@@ -69,12 +67,12 @@ class SkipList(HW_sim_object):
 
         # Loop through all levels in descending order
         for i in range(self.currMaxLevel, -1, -1):
-            val0, lvl0, r0, l0, u0, d0 = self.nodes.mem[n0]
+            val0, hsp0, mdp0, lvl0, r0, l0, u0, d0 = self.nodes.mem[n0]
             # -inf
             outStr += "-oo--"
             # For every node in level 0...
             while r0 != t0:
-                val0, lvl0, r0, l0, u0, d0 = self.nodes.mem[r0]
+                val0, hsp0, mtp0, lvl0, r0, l0, u0, d0 = self.nodes.mem[r0]
                 # Print value in level i if it exists in level 0
                 j = 0
                 u = u0
@@ -89,7 +87,7 @@ class SkipList(HW_sim_object):
                             outStr += "-----"
                         break
                     else:
-                        val, lvl, r, l, u, d = self.nodes.mem[u]
+                        val, hsp, mdp, lvl, r, l, u, d = self.nodes.mem[u]
                         j += 1
                 if i == j:
                     outStr += str(val0) + "--"
@@ -109,24 +107,24 @@ class SkipList(HW_sim_object):
             
             if i > 0:
                 # Read head from lower level
-                self.nodes_r_in_pipe.put(prev_h) # send read request
-                prev_data = yield self.nodes_r_out_pipe.get() # wait for response
-                prev_val, prev_lvl, prev_r, prev_l, prev_u, prev_d = prev_data
+                # Send read request
+                self.nodes_r_in_pipe.put(prev_h)
+                # Wait for response
+                prev_val, prev_hsp, prev_mdp, prev_lvl, prev_r, prev_l, prev_u, prev_d = yield self.nodes_r_out_pipe.get()
                 # Write back w/ up ptrs set to this level
-                self.nodes_w_in_pipe.put((prev_h, [prev_val, prev_lvl, prev_r, prev_l, h, prev_d]))
+                self.nodes_w_in_pipe.put((prev_h, [prev_val, prev_hsp, prev_mdp, prev_lvl, prev_r, prev_l, h, prev_d]))
                 yield self.nodes_w_out_pipe.get()
                 # Read tail from lower level
                 self.nodes_r_in_pipe.put(prev_t)
-                prev_data = yield self.nodes_r_out_pipe.get()
-                prev_val, prev_lvl, prev_r, prev_l, prev_u, prev_d = prev_data
+                prev_val, prev_hsp, prev_mdp, prev_lvl, prev_r, prev_l, prev_u, prev_d = yield self.nodes_r_out_pipe.get()
                 # Write back w/ up ptrs set to this level
-                self.nodes_w_in_pipe.put((prev_t, [prev_val, prev_lvl, prev_r, prev_l, t, prev_d]))
+                self.nodes_w_in_pipe.put((prev_t, [prev_val, prev_hsp, prev_mdp, prev_lvl, prev_r, prev_l, t, prev_d]))
                 yield self.nodes_w_out_pipe.get()
             
             # Write current level's head/tail
-            self.nodes_w_in_pipe.put((h, [NEG_INF, i,  t, -1, -1, prev_h]))
+            self.nodes_w_in_pipe.put((h, [NEG_INF, None, None, i,  t, -1, -1, prev_h]))
             yield self.nodes_w_out_pipe.get()
-            self.nodes_w_in_pipe.put((t, [POS_INF, i, -1,  h, -1, prev_t]))
+            self.nodes_w_in_pipe.put((t, [POS_INF, None, None, i, -1,  h, -1, prev_t]))
             yield self.nodes_w_out_pipe.get()
 
             prev_h = h
@@ -137,10 +135,10 @@ class SkipList(HW_sim_object):
         while True:
             # wait for search command
             (startNode, stopLevel, value) = yield self.search_in_pipe.get()
-            t1 = env.now
+            t1 = self.env.now
             n = startNode
             self.nodes_r_in_pipe.put(n)
-            val, lvl, r, l, u, d = yield self.nodes_r_out_pipe.get()
+            val, hsp, mdp, lvl, r, l, u, d = yield self.nodes_r_out_pipe.get()
             dn = d
             while True:
                 # Move right as long as value is larger than nodes on this level
@@ -149,7 +147,7 @@ class SkipList(HW_sim_object):
                         dn = d
                         n = r
                         self.nodes_r_in_pipe.put(n)
-                        val, lvl, r, l, u, d = yield self.nodes_r_out_pipe.get()
+                        val, hsp, mdp, lvl, r, l, u, d = yield self.nodes_r_out_pipe.get()
                 else:
                     # Backtrack one
                     n = l
@@ -159,16 +157,16 @@ class SkipList(HW_sim_object):
                     else:
                         # Otherwise, go down
                         self.nodes_r_in_pipe.put(dn)
-                        val, lvl, r, l, u, d = yield self.nodes_r_out_pipe.get()
+                        val, hsp, mdp, lvl, r, l, u, d = yield self.nodes_r_out_pipe.get()
             # Output result
-            nclks = env.now - t1
+            nclks = self.env.now - t1
             self.search_out_pipe.put((n, dn, nclks))
 
     def enqueue (self):
         while True:
             # wait for enqueue command
-            value = yield self.enq_in_pipe.get()
-            t1 = env.now
+            (value, hsp, mdp) = yield self.enq_in_pipe.get()
+            t1 = self.env.now
             # Exit if free list does not have enough elements to add nodes at all levels
             if len(self.free_node_list.items) < (self.currMaxLevel + 1):
                 print ("Free list almost empty")
@@ -189,92 +187,82 @@ class SkipList(HW_sim_object):
                 (n, startNode, search_nclks) = yield self.search_out_pipe.get()
                 # Read node at insertion point
                 self.nodes_r_in_pipe.put(n)
-                lVal, lLvl, lR, lL, lU, lD = yield self.nodes_r_out_pipe.get()
+                lVal, lHsp, lMdp, lLvl, lR, lL, lU, lD = yield self.nodes_r_out_pipe.get()
                 # Get new node from free list
                 newNode = self.free_node_list.pop()
                 # Connect left neighbor to new node
-                self.nodes_w_in_pipe.put((n, [lVal, lLvl, newNode, lL, lU, lD]))
+                self.nodes_w_in_pipe.put((n, [lVal, lHsp, lMdp, lLvl, newNode, lL, lU, lD]))
                 yield self.nodes_w_out_pipe.get()
                 # Connect right neighbor
                 self.nodes_r_in_pipe.put(lR)
-                rVal, rLvl, rR, rL, rU, rD = yield self.nodes_r_out_pipe.get()
-                self.nodes_w_in_pipe.put((lR, [rVal, rLvl, rR, newNode, rU, rD]))
+                rVal, rHsp, rMdp, rLvl, rR, rL, rU, rD = yield self.nodes_r_out_pipe.get()
+                self.nodes_w_in_pipe.put((lR, [rVal, rHsp, rMdp, rLvl, rR, newNode, rU, rD]))
                 yield self.nodes_w_out_pipe.get()
                 # Connect with level above if any
                 if uNode != -1:
                     self.nodes_r_in_pipe.put(uNode)
-                    uVal, uLvl, uR, uL, uU, uD = yield self.nodes_r_out_pipe.get()
-                    self.nodes_w_in_pipe.put((uNode, [uVal, uLvl, uR, uL, uU, newNode]))
+                    uVal, uHsp, uMdp, uLvl, uR, uL, uU, uD = yield self.nodes_r_out_pipe.get()
+                    self.nodes_w_in_pipe.put((uNode, [uVal, uHsp, uMdp, uLvl, uR, uL, uU, newNode]))
                     yield self.nodes_w_out_pipe.get()
                 # Connect new node to l/r neighbors on same level and up.  Down ptr is connected in next cycle
-                newVal, newLvl, newR, newL = value, level, lR, n
-                self.nodes_w_in_pipe.put((newNode, [newVal, newLvl, newR, newL, uNode, -1]))
+                newVal, newHsp, newMdp, newLvl, newR, newL = value, hsp, mdp, level, lR, n
+                self.nodes_w_in_pipe.put((newNode, [newVal, newHsp, newMdp, newLvl, newR, newL, uNode, -1]))
                 yield self.nodes_w_out_pipe.get()
                 uNode = newNode
-                uVal, uLvl, uR, uL, uU = newVal, newLvl, newR, newL, newNode
+                uVal, uHsp, uMdp, uLvl, uR, uL, uU = newVal, newHsp, newMdp, newLvl, newR, newL, newNode
                 self.nodeCount += 1
                 # Next level down
                 level -= 1
             # Output enq done
-            enq_nclks = env.now - t1 - search_nclks
+            enq_nclks = self.env.now - t1 - search_nclks
             self.enq_out_pipe.put((search_nclks, enq_nclks))
 
     def dequeue (self):
         while True:
             # wait for deqqueue command
             yield self.deq_in_pipe.get()
-            t1 = env.now
+            t1 = self.env.now
             # Point to tail node in level 0
             t = self.tail[0]
             # Read tail
             self.nodes_r_in_pipe.put(t)
-            tVal, tLvl, tR, tL, tU, tD = yield self.nodes_r_out_pipe.get()
+            tVal, tHsp, tMdp, tLvl, tR, tL, tU, tD = yield self.nodes_r_out_pipe.get()
             # Read node to dequeue
             self.nodes_r_in_pipe.put(tL)
-            retVal, lLvl, lR, lL, lU, lD = yield self.nodes_r_out_pipe.get()
+            retVal, retHsp, retMdp, lLvl, lR, lL, lU, lD = yield self.nodes_r_out_pipe.get()
             # Clear node and return it to free list
-            self.nodes_w_in_pipe.put((tL, [-1, -1, -1, -1, -1, -1]))
+            self.nodes_w_in_pipe.put((tL, [-1, -1, -1, -1, -1, -1, -1, -1]))
             yield self.nodes_w_out_pipe.get()
             self.free_node_list.push(tL)
-            if tL in self.retNodes:
-               print ("Returned duplicate 1:", tL)
-               print (self.retNodes)
-            else:
-                self.retNodes.append(tL)
             self.nodeCount -= 1
             # Read left neighbor
             self.nodes_r_in_pipe.put(lL)
-            llVal, llLvl, llR, llL, llU, llD = yield self.nodes_r_out_pipe.get()
+            llVal, llHsp, llMdp, llLvl, llR, llL, llU, llD = yield self.nodes_r_out_pipe.get()
             # Connect left neighbor to tail
-            self.nodes_w_in_pipe.put((lL,[llVal, llLvl, t, llL, llU, llD]))
+            self.nodes_w_in_pipe.put((lL,[llVal, llHsp, llMdp, llLvl, t, llL, llU, llD]))
             yield self.nodes_w_out_pipe.get()
-            self.nodes_w_in_pipe.put((t,[tVal, tLvl, tR, lL, tU, tD]))
+            self.nodes_w_in_pipe.put((t,[tVal, tHsp, tMdp, tLvl, tR, lL, tU, tD]))
             yield self.nodes_w_out_pipe.get()
             # Loop to free any nodes above
             while lU != -1 and lLvl <= self.currMaxLevel:
                 # Read up neighbor
                 self.nodes_r_in_pipe.put(lU)
-                uVal, uLvl, uR, uL, uU, uD = yield self.nodes_r_out_pipe.get()
+                uVal, uHsp, uMdp, uLvl, uR, uL, uU, uD = yield self.nodes_r_out_pipe.get()
                 # Clear node and return it to free list
-                self.nodes_w_in_pipe.put((lU, [-1, -1, -1, -1, -1, -1]))
+                self.nodes_w_in_pipe.put((lU, [-1, -1, -1, -1, -1, -1, -1, -1]))
                 yield self.nodes_w_out_pipe.get()
                 self.free_node_list.push(lU)
-                if lU in self.retNodes:
-                    print ("Returned duplicate 2:", lU)
-                    print (self.retNodes)
-                else:
-                    self.retNodes.append(lU)
                 self.nodeCount -= 1
                 # Read tail connected to this node
                 self.nodes_r_in_pipe.put(uR)
-                tVal, tLvl, tR, tL, tU, tD = yield self.nodes_r_out_pipe.get()
+                tVal, tHsp, tMdp, tLvl, tR, tL, tU, tD = yield self.nodes_r_out_pipe.get()
                 # Read left neighbor
                 self.nodes_r_in_pipe.put(uL)
-                lVal, lLvl, lR, lL, lU, lD = yield self.nodes_r_out_pipe.get()
+                lVal, lHsp, lMdp, lLvl, lR, lL, lU, lD = yield self.nodes_r_out_pipe.get()
                 # Connect left neighbor to tail
-                self.nodes_w_in_pipe.put((uL,[lVal, lLvl, uR, lL, lU, lD]))
+                self.nodes_w_in_pipe.put((uL,[lVal, lHsp, lMdp, lLvl, uR, lL, lU, lD]))
                 self.nodes_w_out_pipe.get()
-                self.nodes_w_in_pipe.put((uR,[tVal, tLvl, tR, uL, tU, tD]))
+                self.nodes_w_in_pipe.put((uR,[tVal, tHsp, tMdp, tLvl, tR, uL, tU, tD]))
                 self.nodes_w_out_pipe.get()
                 # Move up
                 lU = uU
@@ -287,88 +275,28 @@ class SkipList(HW_sim_object):
                     n = self.head[self.currMaxLevel]
                     t = self.tail[self.currMaxLevel]
                     self.nodes_r_in_pipe.put(n)
-                    val, lvl, r, l, u, d = yield self.nodes_r_out_pipe.get()
+                    val, hsp, mdp, lvl, r, l, u, d = yield self.nodes_r_out_pipe.get()
                     # Walk through all nodes at that level and free them
                     while (r != t):
                         # Read right node
                         self.nodes_r_in_pipe.put(r)
-                        rVal, rLvl, rR, rL, rU, rD = yield self.nodes_r_out_pipe.get()
+                        rVal, rHsp, rMdp, rLvl, rR, rL, rU, rD = yield self.nodes_r_out_pipe.get()
                         # Clear node and free it
-                        self.nodes_w_in_pipe.put((r,[-1, -1, -1, -1, -1, -1]))
+                        self.nodes_w_in_pipe.put((r,[-1, -1, -1, -1, -1, -1, -1, -1]))
                         self.nodes_w_out_pipe.get()
                         self.free_node_list.push(r)
-                        if r in self.retNodes:
-                            print ("Returned duplicate 3:", r)
-                            print (self.retNodes)
-                        else:
-                            self.retNodes.append(lU)
                         self.nodeCount -= 1
                         # Null out up ptrs in nodes below
                         self.nodes_r_in_pipe.put(rD)
-                        dVal, dLvl, dR, dL, dU, dD = yield self.nodes_r_out_pipe.get()
-                        self.nodes_w_in_pipe.put((rD, [dVal, dLvl, dR, dL, -1, dD]))
+                        dVal, dHsp, dMdp, dLvl, dR, dL, dU, dD = yield self.nodes_r_out_pipe.get()
+                        self.nodes_w_in_pipe.put((rD, [dVal, dHsp, dMdp, dLvl, dR, dL, -1, dD]))
                         yield self.nodes_w_out_pipe.get()
                         # Move right
                         r = rR
-                    self.nodes_w_in_pipe.put((n,[val, lvl, t, l, u, d]))
+                    self.nodes_w_in_pipe.put((n,[val, hsp, mdp, lvl, t, l, u, d]))
                     yield self.nodes_w_out_pipe.get()
-                    self.nodes_w_in_pipe.put((t,[val, lvl, r, n, u, d]))
+                    self.nodes_w_in_pipe.put((t,[val, hsp, mdp, lvl, r, n, u, d]))
                     yield self.nodes_w_out_pipe.get()
                     self.currMaxLevel = maxLevel
-            deq_nclks = env.now - t1
-            self.deq_out_pipe.put((retVal, deq_nclks))
-
-def test(env):
-    NumRuns = 100
-    NumOps = 64
-    search_nclks_list = []
-    enq_nclks_list = []
-    tot_enq_nclks_list = []
-    deq_nclks_list = []
-    
-    for j in range(NumRuns):
-        sl = SkipList(env)
-        #print ('@ {:04d} - starting skip list init'.format(env.now))
-        yield env.timeout(40)
-        #print ('@ {:04d} - done skip list init'.format(env.now))
-        #print (sl)
-
-        #print ("Free list size:", len(sl.free_node_list.items))
-        #print ("Run:", j)
-        # Enqueue some values and print skip list
-        for i in range (NumOps):
-            v = random.randint(0,100)
-            t1 = env.now
-            sl.enq_in_pipe.put(v)
-            (search_nclks, enq_nclks) = yield sl.enq_out_pipe.get()
-            tot_enq_nclks = env.now - t1
-            #print ('enq: {} - search: {}, enq: {}, tot: {} clks'.format(v, search_nclks, enq_nclks, tot_enq_nclks))
-            #print (sl)
-            search_nclks_list.append(search_nclks)
-            enq_nclks_list.append(enq_nclks)
-            tot_enq_nclks_list.append(tot_enq_nclks)
-
-        #print ("Free list size:", len(sl.free_node_list.items))
-
-        # Dequeue all values and print skip list
-        while sl.numEntries > 0:
-            sl.deq_in_pipe.put(True)
-            (deq, deq_nclks) = yield sl.deq_out_pipe.get()
-            #print ('deq: {} - {} clks'.format(deq, deq_nclks))
-            #print (sl)
-            deq_nclks_list.append(deq_nclks)
-        #print (search_nclks_list, enq_nclks_list, tot_enq_nclks_list, deq_nclks_list)
-    print ("Time measurements (min, avg, max) for {} runs of {} enq/deq ops".format(NumRuns, NumOps))
-    print ("Search:", min(search_nclks_list), mean(search_nclks_list), max(search_nclks_list))
-    print ("Enq:", min(enq_nclks_list), mean(enq_nclks_list), max(enq_nclks_list))
-    print ("Tot Enq:", min(tot_enq_nclks_list), mean(tot_enq_nclks_list), max(tot_enq_nclks_list))
-    print ("Deq:", min(deq_nclks_list), mean(deq_nclks_list), max(deq_nclks_list))
-
-
-        #print ("Free list size:", len(sl.free_node_list.items))
-
-# Main
-env = simpy.Environment()
-env.process(test(env))
-env.run()
-
+            deq_nclks = self.env.now - t1
+            self.deq_out_pipe.put((retVal, retHsp, retMdp, deq_nclks))
