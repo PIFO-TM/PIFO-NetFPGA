@@ -2,13 +2,15 @@ from __future__ import print_function
 import simpy
 import random
 import math
-import sys
-from statistics import mean
 from hwsim_utils import HW_sim_object, BRAM, Tuser
 from packet_storage_hwsim import Fifo
 
 NEG_INF = -2**32
 POS_INF = 2**32 - 1
+
+# Position indexes
+VAL = 0
+LEFT = 5
 
 class SkipList(HW_sim_object):
     def __init__(self, env, period, size):
@@ -35,7 +37,7 @@ class SkipList(HW_sim_object):
         # FIFO for free node list
         self.free_node_list = Fifo(size)
         # Set current size and max level to zero
-        self.numEntries = 0
+        self.num_entries = 0
         self.nodeCount = 0
         self.currMaxLevel = 0
 
@@ -49,6 +51,15 @@ class SkipList(HW_sim_object):
         # Head and tail pointers for each level, representing -inf and +inf
         self.head = self.log2_size*[0]
         self.tail = self.log2_size*[0]
+        
+        # Busy flag
+        self.busy = 1
+        
+        # Data available flag
+        self.avail = 0
+        
+        # Value at tail of skip list
+        self.value = -1
         
         # register processes for simulation
         self.run(env)
@@ -122,13 +133,15 @@ class SkipList(HW_sim_object):
                 yield self.nodes_w_out_pipe.get()
             
             # Write current level's head/tail
-            self.nodes_w_in_pipe.put((h, [NEG_INF, None, None, i,  t, -1, -1, prev_h]))
+            self.nodes_w_in_pipe.put((h, [POS_INF, -1, -1, i,  t, -1, -1, prev_h]))
             yield self.nodes_w_out_pipe.get()
-            self.nodes_w_in_pipe.put((t, [POS_INF, None, None, i, -1,  h, -1, prev_t]))
+            self.nodes_w_in_pipe.put((t, [NEG_INF, -1, -1, i, -1,  h, -1, prev_t]))
             yield self.nodes_w_out_pipe.get()
 
             prev_h = h
             prev_t = t
+    
+        self.busy = 0
 
     # Search for value starting at startNode and stopping at stopLevel
     def search (self):
@@ -141,8 +154,8 @@ class SkipList(HW_sim_object):
             val, hsp, mdp, lvl, r, l, u, d = yield self.nodes_r_out_pipe.get()
             dn = d
             while True:
-                # Move right as long as value is larger than nodes on this level
-                if val < value:
+                # Move right as long as value is smaller than nodes on this level
+                if value < val:
                     if r != -1:
                         dn = d
                         n = r
@@ -166,15 +179,17 @@ class SkipList(HW_sim_object):
         while True:
             # wait for enqueue command
             (value, hsp, mdp) = yield self.enq_in_pipe.get()
+            #print ("sl enq:", value, hsp, mdp)
             t1 = self.env.now
+            self.busy = 1
             # Exit if free list does not have enough elements to add nodes at all levels
             if len(self.free_node_list.items) < (self.currMaxLevel + 1):
                 print ("Free list almost empty")
                 self.enq_out_pipe.put((0, 0))
                 continue
             # Update max level
-            self.numEntries += 1
-            self.currMaxLevel = int(math.log(self.numEntries, 2))
+            self.num_entries += 1
+            self.currMaxLevel = int(math.log(self.num_entries, 2))
             # Generate random number between 0 and current max level (inclusive)
             level = random.randint(0, self.currMaxLevel)
             # Start search from head of skip list
@@ -214,6 +229,10 @@ class SkipList(HW_sim_object):
                 # Next level down
                 level -= 1
             # Output enq done
+            self.busy = 0
+            self.avail = 1
+            pre_deq_node = self.nodes.mem[self.tail[0]][LEFT]
+            self.value = self.nodes.mem[pre_deq_node][VAL]
             enq_nclks = self.env.now - t1 - search_nclks
             self.enq_out_pipe.put((search_nclks, enq_nclks))
 
@@ -266,10 +285,10 @@ class SkipList(HW_sim_object):
                 self.nodes_w_out_pipe.get()
                 # Move up
                 lU = uU
-            self.numEntries -= 1
+            self.num_entries -= 1
             # Adjust max level
-            if self.numEntries > 0:
-                maxLevel = int(math.log(self.numEntries, 2))
+            if self.num_entries > 0:
+                maxLevel = int(math.log(self.num_entries, 2))
                 # if levels decreased, remove any nodes left in the top level
                 if maxLevel < self.currMaxLevel:
                     n = self.head[self.currMaxLevel]
@@ -293,10 +312,19 @@ class SkipList(HW_sim_object):
                         yield self.nodes_w_out_pipe.get()
                         # Move right
                         r = rR
-                    self.nodes_w_in_pipe.put((n,[val, hsp, mdp, lvl, t, l, u, d]))
+                    # Reconnect head and tail in vacated level
+                    self.nodes_w_in_pipe.put((n,[POS_INF, -1, -1, lvl, t, -1, -1, d]))
                     yield self.nodes_w_out_pipe.get()
-                    self.nodes_w_in_pipe.put((t,[val, hsp, mdp, lvl, r, n, u, d]))
+                    if lvl > 0:
+                        tD = -1
+                    else:
+                        tD = self.tail[lvl-1]
+                    self.nodes_w_in_pipe.put((t,[NEG_INF, -1, -1, lvl, -1, n, -1, self.tail[lvl-1]]))
                     yield self.nodes_w_out_pipe.get()
                     self.currMaxLevel = maxLevel
+            else:
+                self.avail = 0
+            pre_deq_node = self.nodes.mem[self.tail[0]][LEFT]
+            self.value = self.nodes.mem[pre_deq_node][VAL]
             deq_nclks = self.env.now - t1
             self.deq_out_pipe.put((retVal, retHsp, retMdp, deq_nclks))

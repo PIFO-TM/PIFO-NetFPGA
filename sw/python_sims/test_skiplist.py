@@ -1,33 +1,29 @@
 from __future__ import print_function
 import simpy
 import random
-import math
-#import sys
 from statistics import mean
-from hwsim_utils import HW_sim_object, BRAM, Tuser
-from packet_storage_hwsim import Fifo
 from pifo_simpy import SkipList
 
 
 def test(env):
     PERIOD = 1
     MAX_NODES = 128
-    NumRuns = 1
+    NumRuns = 2
     NumOps = 32
     search_nclks_list = []
     enq_nclks_list = []
     tot_enq_nclks_list = []
     deq_nclks_list = []
-    
+
+    sl = SkipList(env, period=PERIOD, size=MAX_NODES)
+    print ('@ {:04d} - starting skip list init'.format(env.now))
+    yield env.timeout(40)
+    print ('@ {:04d} - done skip list init'.format(env.now))
+
     for j in range(NumRuns):
-        sl = SkipList(env, period=PERIOD, size=MAX_NODES)
-        print ('@ {:04d} - starting skip list init'.format(env.now))
-        yield env.timeout(40)
-        print ('@ {:04d} - done skip list init'.format(env.now))
-        print (sl)
-        
-        print ("Free list size:", len(sl.free_node_list.items))
         print ("Run:", j)
+        print (sl)
+        print ("Free list size:", len(sl.free_node_list.items))
         # Enqueue some values and print skip list
         for i in range (NumOps):
             val = random.randint(0,100)
