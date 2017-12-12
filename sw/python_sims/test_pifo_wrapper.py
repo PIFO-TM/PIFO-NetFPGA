@@ -15,8 +15,13 @@ def test(env):
     NumOps = 64
     enq_nclks_list = []
     deq_nclks_list = []
+
+    enq_in_pipe  = simpy.Store(env)
+    enq_out_pipe = simpy.Store(env)
+    deq_in_pipe  = simpy.Store(env)
+    deq_out_pipe = simpy.Store(env) 
     
-    slw = SkipListWrapper(env, num_sl=NUM_SKIP_LISTS, period=PERIOD, size=MAX_NODES)
+    slw = SkipListWrapper(env, enq_in_pipe, enq_out_pipe, deq_in_pipe, deq_out_pipe, num_sl=NUM_SKIP_LISTS, period=PERIOD, size=MAX_NODES)
     print ('@ {:04d} - starting skip list init'.format(env.now))
     yield env.timeout(40)
     print ('@ {:04d} - done skip list init'.format(env.now))

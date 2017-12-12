@@ -5,13 +5,38 @@ import simpy
 from collections import OrderedDict
 
 class Tuser(object):
-    def __init__(self, pkt_len, src_port, dst_port):
+    def __init__(self, pkt_len, src_port, dst_port, rank, pkt_id):
         self.pkt_len = pkt_len
         self.src_port = src_port
         self.dst_port = dst_port
+        self.rank = rank
+        self.pkt_id = pkt_id # used for stats only
 
     def __str__(self):
-        return '{{ pkt_len: {}, src_port: {:08b}, dst_port: {:08b} }}'.format(self.pkt_len, self.src_port, self.dst_port)
+        return '{{ pkt_len: {}, src_port: {:08b}, dst_port: {:08b}, rank: {}, pkt_id: {} }}'.format(self.pkt_len, self.src_port, self.dst_port, self.rank, self.pkt_id)
+
+class Fifo(object):
+    def __init__(self, maxsize):
+        self.maxsize = maxsize
+        self.items = []
+
+    def push(self, item):
+        if len(self.items) < self.maxsize:
+            self.items.append(item)
+        else:
+            print >> sys.stderr, "ERROR: attempted to add to full free list"
+
+    def pop(self):
+        if len(self.items) > 0:
+            item = self.items[0]
+            self.items = self.items[1:]
+            return item
+        else:
+            print >> sys.stderr, "ERROR: attempted to read from empty free list"
+            return None
+
+    def __str__(self):
+        return str(self.items)
 
 class AXI_S_message(object):
     def __init__(self, tdata, tvalid, tkeep, tlast, tuser):
@@ -240,8 +265,9 @@ class AXI_S_slave(HW_sim_object):
             print ('slave @ {:03d} msg received : {}'.format(self.env.now, msg))
 
 
-
-
-
-
+def pad_pkt(pkt, size):
+    if len(pkt) >= size:
+        return pkt
+    else:
+        return pkt / ('\x00'*(size - len(pkt)))
 
