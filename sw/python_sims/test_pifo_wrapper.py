@@ -39,6 +39,8 @@ def test(env):
             print ('enq: {} - {} clks'.format(val, enq_nclks))
             yield env.timeout(PKT_INTERVAL)
         
+        yield env.timeout(100)
+        
         # Dequeue all values and print skip list
         while slw.num_entries > 0:
             slw.deq_in_pipe.put(True)

@@ -59,7 +59,7 @@ class SkipListWrapper(SkipList):
         while True:
             # wait for dequeue request
             deq_req = yield self.deq_in_pipe.get()
-            print ("wrapper num_entries:", self.num_entries)
+            #print ("wrapper num_entries:", self.num_entries)
             t1 = self.env.now
             if self.num_entries > 0:
                 self.num_entries -= 1
