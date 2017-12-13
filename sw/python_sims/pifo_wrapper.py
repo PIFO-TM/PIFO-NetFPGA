@@ -9,14 +9,14 @@ PERIOD = 1
 NUM_NODES = 128
 
 class SkipListWrapper(SkipList):
-    def __init__(self, env, num_sl=NUM_SKIP_LISTS, period=PERIOD, size=NUM_NODES):
+    def __init__(self, env, enq_in_pipe, enq_out_pipe, deq_in_pipe, deq_out_pipe, num_sl=NUM_SKIP_LISTS, period=PERIOD, size=NUM_NODES):
         super(SkipListWrapper, self).__init__(env, period, size)
         self.env = env
         self.num_sl = num_sl
-        self.enq_in_pipe = simpy.Store(env)
-        self.enq_out_pipe = simpy.Store(env)
-        self.deq_in_pipe = simpy.Store(env)
-        self.deq_out_pipe = simpy.Store(env)
+        self.enq_in_pipe = enq_in_pipe
+        self.enq_out_pipe = enq_out_pipe
+        self.deq_in_pipe = deq_in_pipe
+        self.deq_out_pipe = deq_out_pipe
 
         self.sl = []
         self.num_entries = 0
