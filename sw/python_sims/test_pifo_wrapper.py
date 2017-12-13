@@ -11,7 +11,7 @@ def test(env):
     CLK_FREQ = 200 # MHz
     PKT_RATE = 14.8 # MPkts/sec
     PKT_INTERVAL = int(CLK_FREQ/PKT_RATE)
-    NumRuns = 10
+    NumRuns = 50
     NumOps = 64
     enq_nclks_list = []
     deq_nclks_list = []

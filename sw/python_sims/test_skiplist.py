@@ -7,9 +7,9 @@ from pifo_simpy import SkipList
 
 def test(env):
     PERIOD = 1
-    MAX_NODES = 128
-    NumRuns = 2
-    NumOps = 32
+    MAX_NODES = 256
+    NumRuns = 100
+    NumOps = 64
     search_nclks_list = []
     enq_nclks_list = []
     tot_enq_nclks_list = []
@@ -41,7 +41,7 @@ def test(env):
         print ("Free list size:", len(sl.free_node_list.items))
         
         # Dequeue all values and print skip list
-        while sl.numEntries > 0:
+        while sl.num_entries > 0:
             sl.deq_in_pipe.put(True)
             (val, hsp, mdp, deq_nclks) = yield sl.deq_out_pipe.get()
             print ('deq: {} - {} clks'.format(val, deq_nclks))

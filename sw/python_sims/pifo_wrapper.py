@@ -36,20 +36,21 @@ class SkipListWrapper(SkipList):
             # wait for enqueue command
             enq_req = yield self.enq_in_pipe.get()
             t1 = self.env.now
-            sel_sl = None
-            while sel_sl == None:
+            __sel_sl = None
+            while __sel_sl == None:
                 for i in range(self.num_sl):
                     if (self.sl[i].busy == 0):
-                        if sel_sl == None:
-                            sel_sl = i
+                        if __sel_sl == None:
+                            __sel_sl = i
                             min_num_entries = self.sl[i].num_entries
                         else:
                             if self.sl[i].num_entries < min_num_entries:
-                                sel_sl = i
+                                __sel_sl = i
                                 min_num_entries = self.sl[i].num_entries
-                if sel_sl == None:
+                if __sel_sl == None:
                     yield self.env.timeout(PERIOD)
-            self.sl[sel_sl].enq_in_pipe.put(enq_req)
+            self.sl[__sel_sl].enq_in_pipe.put(enq_req)
+            yield self.env.timeout(PERIOD)
             self.enq_out_pipe.put(self.env.now - t1)
             self.num_entries += 1
 
@@ -58,7 +59,12 @@ class SkipListWrapper(SkipList):
         while True:
             # wait for dequeue request
             deq_req = yield self.deq_in_pipe.get()
+            print ("wrapper num_entries:", self.num_entries)
             t1 = self.env.now
+            if self.num_entries > 0:
+                self.num_entries -= 1
+            else:
+                continue
             sel_sl = None
             while sel_sl == None:
                 for i in range(self.num_sl):
@@ -72,7 +78,7 @@ class SkipListWrapper(SkipList):
                                 min_value = self.sl[i].value
                 if sel_sl == None:
                     self.env.timeout(PERIOD)
-            self.num_entries -= 1
             self.sl[sel_sl].deq_in_pipe.put(deq_req)
             deq_resp = yield self.sl[sel_sl].deq_out_pipe.get()
             self.deq_out_pipe.put(deq_resp)
+
