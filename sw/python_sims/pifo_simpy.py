@@ -13,7 +13,7 @@ VAL = 0
 LEFT = 5
 
 class SkipList(HW_sim_object):
-    def __init__(self, env, period, size):
+    def __init__(self, env, period, size, rd_latency, wr_latency):
         super(SkipList, self).__init__(env, period)
         self.env = env
         # Process communication pipes
@@ -30,10 +30,8 @@ class SkipList(HW_sim_object):
 
         # Block RAM for node memory
         depth = size
-        write_latency = 1
-        read_latency = 1
         self.nodes = BRAM(self.env, period, self.nodes_r_in_pipe, self.nodes_r_out_pipe, self.nodes_w_in_pipe, self.nodes_w_out_pipe,
-                          depth, write_latency, read_latency)
+                          depth, wr_latency, rd_latency)
         # FIFO for free node list
         self.free_node_list = Fifo(size)
         # Set current size and max level to zero

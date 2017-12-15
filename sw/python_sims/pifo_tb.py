@@ -22,8 +22,11 @@ class Pifo_tb(HW_sim_object):
     """The top level testbench for the PIFO
     """
 
-    def __init__(self, env, period, snd_rate, fill_level, pkt_len, num_skipLists):
+    def __init__(self, env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, rd_latency=1, wr_latency=1):
         super(Pifo_tb, self).__init__(env, period)
+
+        self.num_samples = num_samples
+        self.sim_complete = False
 
         # Pkt in/out pipes
         self.pifo_pkt_in_pipe = simpy.Store(env)
@@ -54,15 +57,12 @@ class Pifo_tb(HW_sim_object):
         self.pkt_id = 0
         self.active_pkts = OrderedDict()
 
-        # number of cycles over which to measure stats
-        self.stat_interval = 10000 # cycles
-
         # latency measurements
         self.enq_latencies = []
         self.deq_latencies = []
 
         # Instantiate the top-level Pifo
-        self.pifo = Pifo_top(env, period, self.pifo_pkt_in_pipe, self.pifo_pkt_out_pipe, self.pifo_enq_out_pipe, self.pifo_deq_in_pipe, MAX_SEGMENTS, MAX_PKTS, num_skipLists)
+        self.pifo = Pifo_top(env, period, self.pifo_pkt_in_pipe, self.pifo_pkt_out_pipe, self.pifo_enq_out_pipe, self.pifo_deq_in_pipe, MAX_SEGMENTS, MAX_PKTS, num_skipLists, rd_latency=rd_latency, wr_latency=wr_latency)
 
         # register processes for simulation
         self.run()
@@ -80,7 +80,7 @@ class Pifo_tb(HW_sim_object):
         last_pkt_time = 0
         sched_index = 0
         pkt_schedule = None
-        while True:
+        while not self.sim_complete:
             yield self.wait_clock()
 #            if (sched_index == self.pkt_schedule_len or pkt_schedule is None):
 #                # create the packet schedule so we can send at the appropriate rate
@@ -127,8 +127,7 @@ class Pifo_tb(HW_sim_object):
         """Receive pkts from PIFO
         """
         last_interval = 0
-        rcvd_bytes = 0
-        while True:
+        while not self.sim_complete:
             # only submit read requests if the skip list is full enough
             if self.pifo.skip_list_wrapper.num_entries >= self.fill_level:
                 yield self.env.timeout(READ_DELAY)
@@ -149,25 +148,7 @@ class Pifo_tb(HW_sim_object):
                     if enq_nclks is not None:
                         self.enq_latencies.append(enq_nclks)
                         self.deq_latencies.append(deq_nclks)
-                    rcvd_bytes += len(pkt_out)
-                    if self.env.now > last_interval + self.stat_interval and len(self.enq_latencies) > 0:
-                        # report stats
-#                        rate = rcvd_bytes*self.clk_rate*1e6*8/(float(self.stat_interval)*1e9)
-#                        print '@ {} - avg output rate = {} Gbps'.format(self.env.now, rate)
-                        enq_latencies = np.array(self.enq_latencies)
-                        deq_latencies = np.array(self.deq_latencies)
-                        summary = """--------------------------------------------
-@ {} - Summary Stats
-    # pkts received = {}
-    Avg Enqueue Latency = {} cycles, Max = {} cycles
-    Avg Dequeue Latency = {} cycles, Max = {} cycles
-"""
-                        print summary.format(self.env.now, len(self.enq_latencies), np.average(enq_latencies), np.max(enq_latencies), np.average(deq_latencies), np.max(deq_latencies))
-                        # reset state
-                        self.enq_latencies = []
-                        self.deq_latencies = []
-                        last_interval = rcv_time
-                        rcvd_bytes = 0
+                        self.sim_complete = len(self.enq_latencies) >= self.num_samples
                 else:
                     print '@{} - pifo_tb: receive_pkts: pkt_out = {}, meta_out = {}'
             else:

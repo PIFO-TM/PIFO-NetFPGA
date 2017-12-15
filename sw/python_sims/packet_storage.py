@@ -21,7 +21,7 @@ class Pkt_segment(object):
 
 
 class Pkt_storage(HW_sim_object):
-    def __init__(self, env, period, pkt_in_pipe, pkt_out_pipe, ptr_in_pipe, ptr_out_pipe, max_segments=MAX_SEGMENTS, max_pkts=MAX_PKTS):
+    def __init__(self, env, period, pkt_in_pipe, pkt_out_pipe, ptr_in_pipe, ptr_out_pipe, max_segments=MAX_SEGMENTS, max_pkts=MAX_PKTS, rd_latency=1, wr_latency=1):
         super(Pkt_storage, self).__init__(env, period)
 
         # read the incomming pkt and metadata from here
@@ -38,13 +38,13 @@ class Pkt_storage(HW_sim_object):
         self.segments_r_out_pipe = simpy.Store(env)
         self.segments_w_in_pipe = simpy.Store(env)
         # maps: segment ID --> Pkt_seg object
-        self.segments = BRAM(env, period, self.segments_r_in_pipe, self.segments_r_out_pipe, self.segments_w_in_pipe, depth=max_segments)
+        self.segments = BRAM(env, period, self.segments_r_in_pipe, self.segments_r_out_pipe, self.segments_w_in_pipe, depth=max_segments, write_latency=wr_latency, read_latency=rd_latency)
 
         self.metadata_r_in_pipe = simpy.Store(env)
         self.metadata_r_out_pipe = simpy.Store(env)
         self.metadata_w_in_pipe = simpy.Store(env)
         # maps: metadata ptr --> tuser object
-        self.metadata = BRAM(env, period, self.metadata_r_in_pipe, self.metadata_r_out_pipe, self.metadata_w_in_pipe, depth=max_pkts)
+        self.metadata = BRAM(env, period, self.metadata_r_in_pipe, self.metadata_r_out_pipe, self.metadata_w_in_pipe, depth=max_pkts, write_latency=wr_latency, read_latency=rd_latency)
 
         self.max_segments = max_segments
         self.max_pkts = max_pkts
