@@ -61,7 +61,7 @@ class HW_sim_object(object):
         return self.env.process(self.clock())
 
 class BRAM(HW_sim_object):
-    def __init__(self, env, period, r_in_pipe, r_out_pipe, w_in_pipe, w_out_pipe=None, depth=128, write_latency=2, read_latency=2):
+    def __init__(self, env, period, r_in_pipe, r_out_pipe, w_in_pipe, w_out_pipe=None, depth=128, write_latency=1, read_latency=1):
         super(BRAM, self).__init__(env, period)
         self.r_in_pipe = r_in_pipe
         self.r_out_pipe = r_out_pipe

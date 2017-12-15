@@ -51,7 +51,7 @@ class SkipListWrapper(SkipList):
                     yield self.env.timeout(PERIOD)
             self.sl[__sel_sl].enq_in_pipe.put(enq_req)
             yield self.env.timeout(PERIOD)
-            self.enq_out_pipe.put(self.env.now - t1)
+            self.enq_out_pipe.put((self.env.now - t1, self.sl[__sel_sl].enq_out_pipe))
             self.num_entries += 1
 
 

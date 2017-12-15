@@ -2,7 +2,7 @@
 
 import simpy
 from hwsim_utils import *
-from packet_storage_hwsim import *
+from packet_storage import *
 from scapy.all import *
 
 class Packet_storage_tb(HW_sim_object):

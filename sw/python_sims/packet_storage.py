@@ -38,13 +38,13 @@ class Pkt_storage(HW_sim_object):
         self.segments_r_out_pipe = simpy.Store(env)
         self.segments_w_in_pipe = simpy.Store(env)
         # maps: segment ID --> Pkt_seg object
-        self.segments = BRAM(env, period, self.segments_r_in_pipe, self.segments_r_out_pipe, self.segments_w_in_pipe)
+        self.segments = BRAM(env, period, self.segments_r_in_pipe, self.segments_r_out_pipe, self.segments_w_in_pipe, depth=max_segments)
 
         self.metadata_r_in_pipe = simpy.Store(env)
         self.metadata_r_out_pipe = simpy.Store(env)
         self.metadata_w_in_pipe = simpy.Store(env)
         # maps: metadata ptr --> tuser object
-        self.metadata = BRAM(env, period, self.metadata_r_in_pipe, self.metadata_r_out_pipe, self.metadata_w_in_pipe)
+        self.metadata = BRAM(env, period, self.metadata_r_in_pipe, self.metadata_r_out_pipe, self.metadata_w_in_pipe, depth=max_pkts)
 
         self.max_segments = max_segments
         self.max_pkts = max_pkts
