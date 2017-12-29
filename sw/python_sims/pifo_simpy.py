@@ -2,7 +2,7 @@ from __future__ import print_function
 import simpy
 import random
 import math
-from hwsim_utils import HW_sim_object, BRAM, Tuser
+from hwsim_utils import HW_sim_object, BRAM, Tuser, out_reg
 from packet_storage_hwsim import Fifo
 
 NEG_INF = -2**32
@@ -13,9 +13,12 @@ VAL = 0
 LEFT = 5
 
 class SkipList(HW_sim_object):
-    def __init__(self, env, period, size, rd_latency, wr_latency):
+    def __init__(self, env, period, size, outreg_width, rd_latency, wr_latency):
         super(SkipList, self).__init__(env, period)
+        #print ("sl init start")
         self.env = env
+        self.period = period
+        self.outreg_width = outreg_width
         # Process communication pipes
         self.search_in_pipe = simpy.Store(env)
         self.search_out_pipe = simpy.Store(env)
@@ -23,6 +26,10 @@ class SkipList(HW_sim_object):
         self.enq_out_pipe = simpy.Store(env)
         self.deq_in_pipe = simpy.Store(env)
         self.deq_out_pipe = simpy.Store(env)
+        self.outreg_ins_in_pipe = simpy.Store(env)
+        self.outreg_ins_out_pipe = simpy.Store(env)
+        self.outreg_rem_in_pipe = simpy.Store(env)
+        self.outreg_rem_out_pipe = simpy.Store(env)
         self.nodes_r_in_pipe = simpy.Store(env)
         self.nodes_r_out_pipe = simpy.Store(env)
         self.nodes_w_in_pipe = simpy.Store(env)
@@ -32,6 +39,8 @@ class SkipList(HW_sim_object):
         depth = size
         self.nodes = BRAM(self.env, period, self.nodes_r_in_pipe, self.nodes_r_out_pipe, self.nodes_w_in_pipe, self.nodes_w_out_pipe,
                           depth, wr_latency, rd_latency)
+        # Output register on dequeue side
+        self.outreg = out_reg(self.env, period, self.outreg_ins_in_pipe, self.outreg_ins_out_pipe, self.outreg_rem_in_pipe, self.outreg_rem_out_pipe, outreg_width)
         # FIFO for free node list
         self.free_node_list = Fifo(size)
         # Set current size and max level to zero
@@ -67,16 +76,17 @@ class SkipList(HW_sim_object):
         self.env.process(self.search())
         self.env.process(self.enqueue())
         self.env.process(self.dequeue())
+        self.deq_sl_proc = self.env.process(self.deq_sl())
     
     def __str__(self):
         outStr = ""
         # Level 0 head and tail
-        n0 = self.head[0]
+        h0 = self.head[0]
         t0 = self.tail[0]
 
         # Loop through all levels in descending order
         for i in range(self.currMaxLevel, -1, -1):
-            val0, hsp0, mdp0, lvl0, r0, l0, u0, d0 = self.nodes.mem[n0]
+            val0, hsp0, mdp0, lvl0, r0, l0, u0, d0 = self.nodes.mem[h0]
             # -inf
             outStr += "-oo--"
             # For every node in level 0...
@@ -140,6 +150,7 @@ class SkipList(HW_sim_object):
             prev_t = t
     
         self.busy = 0
+        print ("sl init done @", self.env.now)
 
     # Search for value starting at startNode and stopping at stopLevel
     def search (self):
@@ -170,7 +181,7 @@ class SkipList(HW_sim_object):
                         self.nodes_r_in_pipe.put(__dn)
                         __node = yield self.nodes_r_out_pipe.get()
                         if __node == None:
-                            print ("srch 175: addr:", __dn, "data:", __node)
+                            print ("srch 184: addr:", __dn, "data:", __node)
                         __val, __hsp, __mdp, __lvl, __r, __l, __u, __d = __node
             # Output result
             nclks = self.env.now - __t1
@@ -179,28 +190,48 @@ class SkipList(HW_sim_object):
     def enqueue (self):
         while True:
             # wait for enqueue command
-            (__value, __hsp, __mdp) = yield self.enq_in_pipe.get()
-            #print ("sl enq:", value, hsp, mdp)
-            __t1 = self.env.now
-            self.busy = 1
+            (value, hsp, mdp) = yield self.enq_in_pipe.get()
+            #print ("sl enq:", value, "@", self.env.now)
             # Exit if free list does not have enough elements to add nodes at all levels
             if len(self.free_node_list.items) < (self.currMaxLevel + 1):
                 print ("Free list almost empty")
                 self.enq_out_pipe.put((0, 0))
                 continue
-            # Update max level
+            while (self.busy == 1):
+                yield self.env.timeout(self.period)
+            t1 = self.env.now
             self.num_entries += 1
-            self.currMaxLevel = int(math.log(self.num_entries, 2))
+            self.busy = 1
+            # Insert into output reg
+            self.outreg_ins_in_pipe.put((value, [hsp, mdp]))
+            (out_reg_val, out_reg_ptrs) = yield self.outreg_ins_out_pipe.get()
+            if out_reg_val == -1:
+                # Entry was inserted directly into out reg.  Nothing left to do
+                enq_nclks = self.env.now - t1
+                self.enq_out_pipe.put((0, enq_nclks))
+                self.busy = 0
+                self.avail = 1
+                continue
+            else:
+                # out reg insert return an entry (either same new entry or one that was evicted from out reg)
+                # update the entry in case it is different and continue to insert in skip list
+                value = out_reg_val
+                hsp, mdp = out_reg_ptrs
+
+            # Update max level
+            self.currMaxLevel = int(math.log(self.num_entries-self.outreg.num_entries, 2))
             # Generate random number between 0 and current max level (inclusive)
             __level = random.randint(0, self.currMaxLevel)
             # Start search from head of skip list
             __startNode = self.head[self.currMaxLevel]
             __uNode = -1
+            search_nclks_tot = 0
             # Insert new nodes at each level starting at randomly selected level and descending to level zero
             while __level >= 0:
                 # Find insertion point at this level starting from the closest preceding node
-                self.search_in_pipe.put((__startNode, __level, __value))
-                (__n, __startNode, __search_nclks) = yield self.search_out_pipe.get()
+                self.search_in_pipe.put((__startNode, __level, value))
+                (__n, __startNode, search_nclks) = yield self.search_out_pipe.get()
+                search_nclks_tot += search_nclks
                 # Read node at insertion point
                 self.nodes_r_in_pipe.put(__n)
                 __lVal, __lHsp, __lMdp, __lLvl, __lR, __lL, __lU, __lD = yield self.nodes_r_out_pipe.get()
@@ -213,7 +244,7 @@ class SkipList(HW_sim_object):
                 self.nodes_r_in_pipe.put(__lR)
                 __rNode = yield self.nodes_r_out_pipe.get()
                 if __rNode == None:
-                    print ("deq 215: addr:", __lR, "data:", __rNode)
+                    print ("deq 247: addr:", __lR, "data:", __rNode)
                 __rVal, __rHsp, __rMdp, __rLvl, __rR, __rL, __rU, __rD = __rNode
                 self.nodes_w_in_pipe.put((__lR, [__rVal, __rHsp, __rMdp, __rLvl, __rR, __newNode, __rU, __rD]))
                 yield self.nodes_w_out_pipe.get()
@@ -224,7 +255,7 @@ class SkipList(HW_sim_object):
                     self.nodes_w_in_pipe.put((__uNode, [__uVal, __uHsp, __uMdp, __uLvl, __uR, __uL, __uU, __newNode]))
                     yield self.nodes_w_out_pipe.get()
                 # Connect new node to l/r neighbors on same level and up.  Down ptr is connected in next cycle
-                __newVal, __newHsp, __newMdp, __newLvl, __newR, __newL = __value, __hsp, __mdp, __level, __lR, __n
+                __newVal, __newHsp, __newMdp, __newLvl, __newR, __newL = value, hsp, mdp, __level, __lR, __n
                 self.nodes_w_in_pipe.put((__newNode, [__newVal, __newHsp, __newMdp, __newLvl, __newR, __newL, __uNode, -1]))
                 yield self.nodes_w_out_pipe.get()
                 __uNode = __newNode
@@ -233,114 +264,150 @@ class SkipList(HW_sim_object):
                 # Next level down
                 __level -= 1
             # Output enq done
-            pre_deq_node = self.nodes.mem[self.tail[0]][LEFT]
-            self.value = self.nodes.mem[pre_deq_node][VAL]
-            enq_nclks = self.env.now - __t1 - __search_nclks
-            self.enq_out_pipe.put((__search_nclks, enq_nclks))
+            #pre_deq_node = self.nodes.mem[self.tail[0]][LEFT]
+            #self.value = self.nodes.mem[pre_deq_node][VAL]
+            self.value = self.outreg.min
+            enq_nclks = self.env.now - t1 - search_nclks_tot
+            self.enq_out_pipe.put((search_nclks_tot, enq_nclks))
             self.busy = 0
             self.avail = 1
 
+    def deq_sl (self):
+        while True:
+            try:
+                # Wait one clock
+                yield self.env.timeout(self.period)
+                # If there's room in out reg and there are entries in skip list and it's not busy
+                if (self.outreg.num_entries < self.outreg.width) and self.num_entries > self.outreg.num_entries and self.busy == 0:
+                    #print ("started deq_sel @", self.env.now)
+                    self.busy = 1
+                    # Point to tail node in level 0
+                    t = self.tail[0]
+                    # Read tail
+                    self.nodes_r_in_pipe.put(t)
+                    __tVal, __tHsp, __tMdp, __tLvl, __tR, __tL, __tU, __tD = yield self.nodes_r_out_pipe.get()
+                    # Read node to dequeue
+                    self.nodes_r_in_pipe.put(__tL)
+                    __dqVal, __dqHsp, __dqMdp, __dqLvl, __dqR, __dqL, __dqU, __dqD = yield self.nodes_r_out_pipe.get()
+                    if __dqL == -1:
+                        print ("deq_sl 293: addr:", __tL, "data:", __dqVal, __dqHsp, __dqMdp, __dqLvl, __dqR, __dqL, __dqU, __dqD)
+                        print ("num_entries:", self.num_entries)
+
+                    # Send dequeued value to out reg
+                    self.outreg.ins_in_pipe.put((__dqVal, [__dqHsp, __dqMdp]))
+                    (tmpVal, tmpPtrs) = yield self.outreg_ins_out_pipe.get()
+                    # tmpVal should be -1 because there was room available in out reg
+                    if tmpVal != -1:
+                        print ("Dequeue Error!: Received non-null value from out reg:", tmpVal, tmpPtrs)
+                
+                    # Read left neighbor
+                    self.nodes_r_in_pipe.put(__dqL)
+                    __lNode = yield self.nodes_r_out_pipe.get()
+                    if __lNode == None:
+                        print ("deq 307: addr:", __dqL, "data:", __lNode)
+                    __llVal, __llHsp, __llMdp, __llLvl, __llR, __llL, __llU, __llD = __lNode
+                    # Connect left neighbor to tail
+                    self.nodes_w_in_pipe.put((__dqL,[__llVal, __llHsp, __llMdp, __llLvl, t, __llL, __llU, __llD]))
+                    yield self.nodes_w_out_pipe.get()
+                    self.nodes_w_in_pipe.put((t,[__tVal, __tHsp, __tMdp, __tLvl, __tR, __dqL, __tU, __tD]))
+                    yield self.nodes_w_out_pipe.get()
+                
+                    # Clear node and return it to free list
+                    #print ("deq_sl: Clear node and return:", __tL)
+                    self.nodes_w_in_pipe.put((__tL, [-1, -1, -1, -1, -1, -1, -1, -1]))
+                    yield self.nodes_w_out_pipe.get()
+                    self.free_node_list.push(__tL)
+                    self.nodeCount -= 1
+                
+                    # Loop to free any nodes above
+                    while __dqU != -1 and __dqLvl <= self.currMaxLevel:
+                        # Read up neighbor
+                        self.nodes_r_in_pipe.put(__dqU)
+                        __uVal, __uHsp, __uMdp, __uLvl, __uR, __uL, __uU, __uD = yield self.nodes_r_out_pipe.get()
+                        # Read tail connected to this node
+                        self.nodes_r_in_pipe.put(__uR)
+                        __tVal, __tHsp, __tMdp, __tLvl, __tR, __tL, __tU, __tD = yield self.nodes_r_out_pipe.get()
+                        # Read left neighbor
+                        self.nodes_r_in_pipe.put(__uL)
+                        __lVal, __lHsp, __lMdp, __lLvl, __lR, __lL, __lU, __lD = yield self.nodes_r_out_pipe.get()
+                        # Connect left neighbor to tail
+                        self.nodes_w_in_pipe.put((__uL,[__lVal, __lHsp, __lMdp, __lLvl, __uR, __lL, __lU, __lD]))
+                        self.nodes_w_out_pipe.get()
+                        self.nodes_w_in_pipe.put((__uR,[__tVal, __tHsp, __tMdp, __tLvl, __tR, __uL, __tU, __tD]))
+                        self.nodes_w_out_pipe.get()
+                        # Clear node and return it to free list
+                        self.nodes_w_in_pipe.put((__dqU, [-1, -1, -1, -1, -1, -1, -1, -1]))
+                        yield self.nodes_w_out_pipe.get()
+                        self.free_node_list.push(__dqU)
+                        self.nodeCount -= 1
+                        # Move up
+                        __dqU = __uU
+                        
+                    # Adjust max level
+                    __maxLevel = int(math.log(self.num_entries-self.outreg.num_entries+1, 2))
+                    #print ("maxLevel:", __maxLevel,"currMaxLevel:", self.currMaxLevel)
+                    # if levels decreased, remove any nodes left in the top level
+                    if __maxLevel < self.currMaxLevel:
+                        __h = self.head[self.currMaxLevel]
+                        __t = self.tail[self.currMaxLevel]
+                        self.nodes_r_in_pipe.put(__h)
+                        __val, __hsp, __mdp, __lvl, __r, __l, __u, __d = yield self.nodes_r_out_pipe.get()
+                        # Connect head and tail in vacated level
+                        self.nodes_w_in_pipe.put((__h,[POS_INF, -1, -1, __lvl, __t, -1, -1, self.head[__lvl-1]]))
+                        yield self.nodes_w_out_pipe.get()
+                        self.nodes_w_in_pipe.put((__t,[NEG_INF, -1, -1, __lvl, -1, __h, -1, self.tail[__lvl-1]]))
+                        yield self.nodes_w_out_pipe.get()
+                        self.currMaxLevel = __maxLevel
+                        # Walk through all nodes at that level and free them
+                        while (__r != __t):
+                            # Read right node
+                            self.nodes_r_in_pipe.put(__r)
+                            __rVal, __rHsp, __rMdp, __rLvl, __rR, __rL, __rU, __rD = yield self.nodes_r_out_pipe.get()
+                            if __rD == -1:
+                                print ("deq 367: addr:", __r, "data:", __rVal, __rHsp, __rMdp, __rLvl, __rR, __rL, __rU, __rD)
+
+                            # Null out up ptrs in nodes below
+                            self.nodes_r_in_pipe.put(__rD)
+                            __dNode = yield self.nodes_r_out_pipe.get()
+                            if __dNode == None:
+                                print ("deq 373: addr:", __rD, "data:", __dNode)
+                            __dVal, __dHsp, __dMdp, __dLvl, __dR, __dL, __dU, __dD = __dNode
+                            self.nodes_w_in_pipe.put((__rD, [__dVal, __dHsp, __dMdp, __dLvl, __dR, __dL, -1, __dD]))
+                            yield self.nodes_w_out_pipe.get()
+
+                            # Clear node and free it
+                            self.nodes_w_in_pipe.put((__r,[-1, -1, -1, -1, -1, -1, -1, -1]))
+                            self.nodes_w_out_pipe.get()
+                            self.free_node_list.push(__r)
+                            self.nodeCount -= 1
+                            # Move right
+                            __r = __rR
+ 
+                    #print ("finished deq_sl @", self.env.now)
+                    self.busy = 0
+
+            except simpy.Interrupt as i:
+                print ("deq_sl stopped")
+                break
+
     def dequeue (self):
         while True:
-            # wait for dequeue command
+            # Wait for dequeue command
             yield self.deq_in_pipe.get()
+            t1 = self.env.now
+            # Wait if out reg is empty
+            while self.outreg.num_entries == 0:
+                yield self.env.timeout(self.period)
+            # Send remove request to out reg
+            #print ("pifo_simpy: dequeue: min value:", self.outreg.min)
+            self.outreg_rem_in_pipe.put(True)
+            (retVal, (retHsp, retMdp)) = yield self.outreg_rem_out_pipe.get()
+            deq_nclks = self.env.now - t1
+            self.deq_out_pipe.put((retVal, retHsp, retMdp, deq_nclks))
+           
+            self.value = self.outreg.min
+            #print ("pifo_simpy: dequeue: min value:", self.value)
+
             self.num_entries -= 1
-            __t1 = self.env.now
-            # Point to tail node in level 0
-            __t = self.tail[0]
-            # Read tail
-            self.nodes_r_in_pipe.put(__t)
-            __tVal, __tHsp, __tMdp, __tLvl, __tR, __tL, __tU, __tD = yield self.nodes_r_out_pipe.get()
-            # Read node to dequeue
-            self.nodes_r_in_pipe.put(__tL)
-            __retVal, __retHsp, __retMdp, __lLvl, __lR, __lL, __lU, __lD = yield self.nodes_r_out_pipe.get()
-            if __lL == -1:
-                print ("deq 260: addr:", __tL, "data:", __retVal, __retHsp, __retMdp, __lLvl, __lR, __lL, __lU, __lD)
-                print ("num_entries:", self.num_entries)
-            # Clear node and return it to free list
-            self.nodes_w_in_pipe.put((__tL, [-1, -1, -1, -1, -1, -1, -1, -1]))
-            yield self.nodes_w_out_pipe.get()
-            self.free_node_list.push(__tL)
-            self.nodeCount -= 1
-            # Read left neighbor
-            self.nodes_r_in_pipe.put(__lL)
-            __lNode = yield self.nodes_r_out_pipe.get()
-            if __lNode == None:
-                print ("deq 266: addr:", __lL, "data:", __lNode)
-            __llVal, __llHsp, __llMdp, __llLvl, __llR, __llL, __llU, __llD = __lNode
-            # Connect left neighbor to tail
-            self.nodes_w_in_pipe.put((__lL,[__llVal, __llHsp, __llMdp, __llLvl, __t, __llL, __llU, __llD]))
-            yield self.nodes_w_out_pipe.get()
-            self.nodes_w_in_pipe.put((__t,[__tVal, __tHsp, __tMdp, __tLvl, __tR, __lL, __tU, __tD]))
-            yield self.nodes_w_out_pipe.get()
-            # Loop to free any nodes above
-            while __lU != -1 and __lLvl <= self.currMaxLevel:
-                # Read up neighbor
-                self.nodes_r_in_pipe.put(__lU)
-                __uVal, __uHsp, __uMdp, __uLvl, __uR, __uL, __uU, __uD = yield self.nodes_r_out_pipe.get()
-                # Clear node and return it to free list
-                self.nodes_w_in_pipe.put((__lU, [-1, -1, -1, -1, -1, -1, -1, -1]))
-                yield self.nodes_w_out_pipe.get()
-                self.free_node_list.push(__lU)
-                self.nodeCount -= 1
-                # Read tail connected to this node
-                self.nodes_r_in_pipe.put(__uR)
-                __tVal, __tHsp, __tMdp, __tLvl, __tR, __tL, __tU, __tD = yield self.nodes_r_out_pipe.get()
-                # Read left neighbor
-                self.nodes_r_in_pipe.put(__uL)
-                __lVal, __lHsp, __lMdp, __lLvl, __lR, __lL, __lU, __lD = yield self.nodes_r_out_pipe.get()
-                # Connect left neighbor to tail
-                self.nodes_w_in_pipe.put((__uL,[__lVal, __lHsp, __lMdp, __lLvl, __uR, __lL, __lU, __lD]))
-                self.nodes_w_out_pipe.get()
-                self.nodes_w_in_pipe.put((__uR,[__tVal, __tHsp, __tMdp, __tLvl, __tR, __uL, __tU, __tD]))
-                self.nodes_w_out_pipe.get()
-                # Move up
-                __lU = __uU
-            # Adjust max level
-            if self.num_entries > 0:
-                __maxLevel = int(math.log(self.num_entries, 2))
-                # if levels decreased, remove any nodes left in the top level
-                if __maxLevel < self.currMaxLevel:
-                    __n = self.head[self.currMaxLevel]
-                    __t = self.tail[self.currMaxLevel]
-                    self.nodes_r_in_pipe.put(__n)
-                    __val, __hsp, __mdp, __lvl, __r, __l, __u, __d = yield self.nodes_r_out_pipe.get()
-                    # Walk through all nodes at that level and free them
-                    while (__r != __t):
-                        # Read right node
-                        self.nodes_r_in_pipe.put(__r)
-                        __rVal, __rHsp, __rMdp, __rLvl, __rR, __rL, __rU, __rD = yield self.nodes_r_out_pipe.get()
-                        if __rD == -1:
-                            print ("deq 312: addr:", __r, "data:", __rVal, __rHsp, __rMdp, __rLvl, __rR, __rL, __rU, __rD)
-                       
-                        # Clear node and free it
-                        self.nodes_w_in_pipe.put((__r,[-1, -1, -1, -1, -1, -1, -1, -1]))
-                        self.nodes_w_out_pipe.get()
-                        self.free_node_list.push(__r)
-                        self.nodeCount -= 1
-                        # Null out up ptrs in nodes below
-                        self.nodes_r_in_pipe.put(__rD)
-                        __dNode = yield self.nodes_r_out_pipe.get()
-                        if __dNode == None:
-                            print ("deq 315: addr:", __rD, "data:", __dNode)
-                        __dVal, __dHsp, __dMdp, __dLvl, __dR, __dL, __dU, __dD = __dNode
-                        self.nodes_w_in_pipe.put((__rD, [__dVal, __dHsp, __dMdp, __dLvl, __dR, __dL, -1, __dD]))
-                        yield self.nodes_w_out_pipe.get()
-                        # Move right
-                        __r = __rR
-                    # Reconnect head and tail in vacated level
-                    self.nodes_w_in_pipe.put((__n,[POS_INF, -1, -1, __lvl, __t, -1, -1, __d]))
-                    yield self.nodes_w_out_pipe.get()
-                    if __lvl > 0:
-                        __tD = -1
-                    else:
-                        __tD = self.tail[__lvl-1]
-                    self.nodes_w_in_pipe.put((__t,[NEG_INF, -1, -1, __lvl, -1, __n, -1, self.tail[__lvl-1]]))
-                    yield self.nodes_w_out_pipe.get()
-                    self.currMaxLevel = __maxLevel
-            else:
+            if self.num_entries == 0:
                 self.avail = 0
-            pre_deq_node = self.nodes.mem[self.tail[0]][LEFT]
-            self.value = self.nodes.mem[pre_deq_node][VAL]
-            deq_nclks = self.env.now - __t1
-            self.deq_out_pipe.put((__retVal, __retHsp, __retMdp, deq_nclks))

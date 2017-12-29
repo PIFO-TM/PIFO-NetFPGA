@@ -59,12 +59,12 @@ class Pifo_sim(object):
             results.append(sim_res)
         self.plot_results(mem_latencies, results, 'mem_latency', 'lower right')
 
-    def run_sim(self, fill_level, pkt_len, num_skipLists, num_samples, rd_latency=1, wr_latency=1):
+    def run_sim(self, fill_level, pkt_len, num_skipLists, num_samples, outreg_width=1, rd_latency=1, wr_latency=1):
         env = simpy.Environment()
         period = 1
         snd_rate = 1 # not currently used
         # instantiate the testbench
-        ps_tb = Pifo_tb(env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, rd_latency, wr_latency)
+        ps_tb = Pifo_tb(env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, rd_latency, wr_latency)
         # run the simulation
         env.run()
         # collect the results

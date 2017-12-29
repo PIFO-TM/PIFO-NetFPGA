@@ -22,12 +22,15 @@ class Pifo_tb(HW_sim_object):
     """The top level testbench for the PIFO
     """
 
-    def __init__(self, env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, rd_latency=1, wr_latency=1):
+    def __init__(self, env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, rd_latency=1, wr_latency=1):
         super(Pifo_tb, self).__init__(env, period)
 
+        self.env = env
+        self.period = period
         self.num_samples = num_samples
+        self.num_skipLists = num_skipLists
         self.sim_complete = False
-
+        
         # Pkt in/out pipes
         self.pifo_pkt_in_pipe = simpy.Store(env)
         self.pifo_pkt_out_pipe = simpy.Store(env)
@@ -62,7 +65,7 @@ class Pifo_tb(HW_sim_object):
         self.deq_latencies = []
 
         # Instantiate the top-level Pifo
-        self.pifo = Pifo_top(env, period, self.pifo_pkt_in_pipe, self.pifo_pkt_out_pipe, self.pifo_enq_out_pipe, self.pifo_deq_in_pipe, MAX_SEGMENTS, MAX_PKTS, num_skipLists, rd_latency=rd_latency, wr_latency=wr_latency)
+        self.pifo = Pifo_top(env, period, self.pifo_pkt_in_pipe, self.pifo_pkt_out_pipe, self.pifo_enq_out_pipe, self.pifo_deq_in_pipe, MAX_SEGMENTS, MAX_PKTS, num_skipLists, outreg_width, rd_latency=rd_latency, wr_latency=wr_latency)
 
         # register processes for simulation
         self.run()
@@ -113,9 +116,10 @@ class Pifo_tb(HW_sim_object):
                 sched_index += 1
                 last_pkt_time = self.env.now
                 # wait for enqueue to complete
-                (slw_enq_nclks, sl_enq_out_pipe) = yield self.pifo_enq_out_pipe.get()
+                #(slw_enq_nclks, sl_enq_out_pipe) = yield self.pifo_enq_out_pipe.get()
+                slw_enq_nclks = yield self.pifo_enq_out_pipe.get()
                 # wait for selected skip list to complete enqueue
-                yield sl_enq_out_pipe.get()
+                #yield sl_enq_out_pipe.get()
                 end_time = self.env.now
 
                 enq_nclks = end_time - start_time
@@ -154,4 +158,10 @@ class Pifo_tb(HW_sim_object):
             else:
                 yield self.wait_clock()
 
+        # Wait until skip lists are done
+        for i in range(self.num_skipLists):
+            while self.pifo.skip_list_wrapper.sl[i].busy == 1:
+                yield self.env.timeout(self.period)
+            # Stop deq_sl processes
+            self.pifo.skip_list_wrapper.sl[i].deq_sl_proc.interrupt('Done')
 

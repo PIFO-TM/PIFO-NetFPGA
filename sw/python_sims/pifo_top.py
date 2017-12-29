@@ -11,7 +11,7 @@ from pifo_wrapper import SkipListWrapper
 
 class Pifo_top(HW_sim_object):
 
-    def __init__(self, env, period, pkt_in_pipe, pkt_out_pipe, enq_out_pipe, deq_in_pipe, max_segments, max_pkts, num_skip_lists, rd_latency=1, wr_latency=1):
+    def __init__(self, env, period, pkt_in_pipe, pkt_out_pipe, enq_out_pipe, deq_in_pipe, max_segments, max_pkts, num_skip_lists, outreg_width, rd_latency=1, wr_latency=1):
         super(Pifo_top, self).__init__(env, period)
 
         # Pipes to pass packets around
@@ -33,7 +33,7 @@ class Pifo_top(HW_sim_object):
         self.pkt_store = Pkt_storage(env, period, self.ps_pkt_in_pipe, self.top_pkt_out_pipe, self.ps_ptr_in_pipe, self.ps_ptr_out_pipe, max_segments, max_pkts, rd_latency=rd_latency, wr_latency=wr_latency)
 
         # Instantiate the top-level Skip List
-        self.skip_list_wrapper = SkipListWrapper(env, self.sl_enq_in_pipe, self.sl_enq_out_pipe, self.top_deq_in_pipe, self.sl_deq_out_pipe, num_sl=num_skip_lists, period=period, size=max_pkts, rd_latency=rd_latency, wr_latency=wr_latency)
+        self.skip_list_wrapper = SkipListWrapper(env, self.sl_enq_in_pipe, self.sl_enq_out_pipe, self.top_deq_in_pipe, self.sl_deq_out_pipe, num_sl=num_skip_lists, period=period, size=max_pkts, outreg_width=outreg_width, rd_latency=rd_latency, wr_latency=wr_latency)
 
         # register processes for simulation
         self.run()

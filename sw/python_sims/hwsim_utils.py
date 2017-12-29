@@ -265,6 +265,78 @@ class AXI_S_slave(HW_sim_object):
             print ('slave @ {:03d} msg received : {}'.format(self.env.now, msg))
 
 
+class out_reg(HW_sim_object):
+    def __init__(self, env, period, ins_in_pipe, ins_out_pipe, rem_in_pipe, rem_out_pipe, width=16):
+        super(out_reg, self).__init__(env, period)
+        self.val = width*[None]
+        self.ptrs = width*[None]
+        self.ins_in_pipe = ins_in_pipe
+        self.ins_out_pipe = ins_out_pipe
+        self.rem_in_pipe = rem_in_pipe
+        self.rem_out_pipe = rem_out_pipe
+        self.width = width
+        self.num_entries = 0
+        self.min = -1
+        
+        # register processes for simulation
+        self.run()
+    
+    def run(self):
+        self.env.process(self.insert())
+        self.env.process(self.remove())
+
+    def insert(self):
+        while True:
+            # Wait for insert request
+            (val, ptrs) = yield self.ins_in_pipe.get()
+            yield self.wait_clock()
+            # Room available in register, just add the entry to the register
+            if self.num_entries < self.width:
+                self.val[self.num_entries] = val
+                self.ptrs[self.num_entries] = ptrs
+                self.num_entries += 1
+                self.ins_out_pipe.put((-1, [-1, -1]))
+            else:
+                # No room available
+                # Find max value in register
+                max_idx = self.val.index(max(self.val))
+                max_val = self.val[max_idx]
+                max_ptrs = self.ptrs[max_idx]
+                # If new value is smaller than max
+                if val < max_val:
+                    # Replace max value with new value
+                    self.val[max_idx] = val
+                    self.ptrs[max_idx] = ptrs
+                    # Return removed max value and data through pipe
+                    # so can they can be inserted in skip list
+                    self.ins_out_pipe.put((max_val, max_ptrs))
+                else:
+                    # Send new val and data through pipe so they can be inserted in skip list
+                    self.ins_out_pipe.put((val, ptrs))
+            # Output min value
+            self.min = min(self.val[:self.num_entries])
+
+    def remove(self):
+        while True:
+            # Wait for remove request
+            yield self.rem_in_pipe.get()
+            yield self.wait_clock()
+            # Find min value in register
+            min_idx = self.val.index(min(self.val[:self.num_entries]))
+            min_val = self.val[min_idx]
+            min_ptrs = self.ptrs[min_idx]
+            # Shift up values below "hole" to pack the register
+            self.val[min_idx:self.num_entries-1] = self.val[min_idx+1:self.num_entries]
+            self.ptrs[min_idx:self.num_entries-1] = self.ptrs[min_idx+1:self.num_entries]
+            self.val[self.num_entries-1] = None
+            self.num_entries -= 1
+            # Send removed value through pipe
+            self.rem_out_pipe.put((min_val, min_ptrs))
+            if self.num_entries > 0:
+                self.min = min(self.val[:self.num_entries])
+            else:
+                self.min = self.val[0]
+
 def pad_pkt(pkt, size):
     if len(pkt) >= size:
         return pkt
