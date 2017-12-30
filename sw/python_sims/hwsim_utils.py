@@ -276,7 +276,8 @@ class out_reg(HW_sim_object):
         self.rem_out_pipe = rem_out_pipe
         self.width = width
         self.num_entries = 0
-        self.min = -1
+        self.next = -1
+        self.next_valid = 0
         
         # register processes for simulation
         self.run()
@@ -289,12 +290,13 @@ class out_reg(HW_sim_object):
         while True:
             # Wait for insert request
             (val, ptrs) = yield self.ins_in_pipe.get()
-            yield self.wait_clock()
+            self.next_valid = 0
             # Room available in register, just add the entry to the register
             if self.num_entries < self.width:
                 self.val[self.num_entries] = val
                 self.ptrs[self.num_entries] = ptrs
                 self.num_entries += 1
+                # -1 signals to the caller that there was room in the register to insert the entry without displacing another one
                 self.ins_out_pipe.put((-1, [-1, -1]))
             else:
                 # No room available
@@ -314,12 +316,14 @@ class out_reg(HW_sim_object):
                     # Send new val and data through pipe so they can be inserted in skip list
                     self.ins_out_pipe.put((val, ptrs))
             # Output min value
-            self.min = min(self.val[:self.num_entries])
+            self.next = min(self.val[:self.num_entries])
+            self.next_valid = 1
 
     def remove(self):
         while True:
             # Wait for remove request
             yield self.rem_in_pipe.get()
+            self.next_valid = 0
             yield self.wait_clock()
             # Find min value in register
             min_idx = self.val.index(min(self.val[:self.num_entries]))
@@ -330,12 +334,12 @@ class out_reg(HW_sim_object):
             self.ptrs[min_idx:self.num_entries-1] = self.ptrs[min_idx+1:self.num_entries]
             self.val[self.num_entries-1] = None
             self.num_entries -= 1
+            if self.num_entries > 0:
+                self.next = min(self.val[:self.num_entries])
+                self.next_valid = 1
+            
             # Send removed value through pipe
             self.rem_out_pipe.put((min_val, min_ptrs))
-            if self.num_entries > 0:
-                self.min = min(self.val[:self.num_entries])
-            else:
-                self.min = self.val[0]
 
 def pad_pkt(pkt, size):
     if len(pkt) >= size:

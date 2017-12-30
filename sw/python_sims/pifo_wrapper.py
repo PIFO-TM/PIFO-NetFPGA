@@ -2,13 +2,12 @@ from __future__ import print_function
 import simpy
 import random
 from statistics import mean
-from pifo_simpy import SkipList
+from pifo_skip_list import SkipList
 
 class SkipListWrapper(SkipList):
     
     def __init__(self, env, enq_in_pipe, enq_out_pipe, deq_in_pipe, deq_out_pipe, num_sl, period, size, outreg_width, rd_latency, wr_latency):
         super(SkipListWrapper, self).__init__(env, period, size, outreg_width, rd_latency, wr_latency)
-        #print ("slw init start")
         self.env = env
         self.num_sl = num_sl
         self.period = period
@@ -34,59 +33,61 @@ class SkipListWrapper(SkipList):
         while True:
             # wait for enqueue command
             enq_req = yield self.enq_in_pipe.get()
+            
             t1 = self.env.now
-            #print ("pifo_wrapper enq start:", t1)
             # Select the skip list w/ min number of entries among the ready (not busy) skip lists
-            __sel_sl = None
-            while __sel_sl == None:
+            sel_sl = None
+            while sel_sl == None:
                 for i in range(self.num_sl):
-                    #print ("slw: i: {} busy: {}".format(i, self.sl[i].busy))
                     if (self.sl[i].busy == 0):
-                        if __sel_sl == None:
-                            __sel_sl = i
+                        if sel_sl == None:
+                            sel_sl = i
                             min_num_entries = self.sl[i].num_entries
                         else:
                             if self.sl[i].num_entries < min_num_entries:
-                                __sel_sl = i
+                                sel_sl = i
                                 min_num_entries = self.sl[i].num_entries
                 # All skip lists busy, try again
-                if __sel_sl == None:
+                if sel_sl == None:
                     yield self.env.timeout(self.period)
             # Send enqueue request to selected skip list
-            self.sl[__sel_sl].enq_in_pipe.put(enq_req)
+            self.sl[sel_sl].enq_in_pipe.put(enq_req)
             yield self.env.timeout(self.period)
-            #print ("pifo_wrapper enq end:", self.env.now)
-            #self.enq_out_pipe.put((self.env.now - t1, self.sl[__sel_sl].enq_out_pipe))
-            self.enq_out_pipe.put(self.env.now - t1)
             self.num_entries += 1
+            self.enq_out_pipe.put(self.env.now - t1)
 
     def dequeue(self):
         while True:
             # wait for dequeue request
             deq_req = yield self.deq_in_pipe.get()
-            #print ("wrapper num_entries:", self.num_entries)
-            t1 = self.env.now
             if self.num_entries > 0:
                 self.num_entries -= 1
             else:
+                print ("ERROR: Dequeue from empty PIFO!")
                 continue
+            
+            t1 = self.env.now
+            # From non-empty skip lists/regs, select the one with the min value
             sel_sl = None
             while sel_sl == None:
                 for i in range(self.num_sl):
-                    #print ("deq: i: {}, avail: {}, min: {}".format(i, self.sl[i].avail, self.sl[i].value))
-                    if (self.sl[i].avail == 1):
+                    # Wait until out reg has valid data if there's data in the skip list
+                    while (self.sl[i].num_entries > 0 and self.sl[i].outreg.next_valid == 0):
+                        yield self.env.timeout(self.period)
+                    if self.sl[i].outreg.next_valid == 1:
                         if sel_sl == None:
                             sel_sl = i
-                            min_value = self.sl[i].value
+                            min_value = self.sl[i].outreg.next
                         else:
-                            if self.sl[i].value < min_value:
+                            if self.sl[i].outreg.next < min_value:
                                 sel_sl = i
-                                min_value = self.sl[i].value
-                        #print ("sel_sl: {}, min: {}".format(sel_sl, min_value))
+                                min_value = self.sl[i].outreg.next
                 if sel_sl == None:
-                    self.env.timeout(self.period)
+                    yield self.env.timeout(self.period)
             # Send dequeue request to selected skip list
             self.sl[sel_sl].deq_in_pipe.put(deq_req)
-            deq_resp = yield self.sl[sel_sl].deq_out_pipe.get()
-            self.deq_out_pipe.put(deq_resp)
+            (deq_val, deq_hsp, deq_mdp, deq_nclks) = yield self.sl[sel_sl].deq_out_pipe.get()
+            # Update deq nclks
+            deq_nclks = self.env.now - t1
+            self.deq_out_pipe.put((deq_val, deq_hsp, deq_mdp, deq_nclks))
 

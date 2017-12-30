@@ -2,17 +2,17 @@ from __future__ import print_function
 import simpy
 import random
 from statistics import mean
-from pifo_simpy import SkipList
+from pifo_skip_list import SkipList
 
 
 def test(env):
     PERIOD = 1
-    MAX_NODES = 256
+    MAX_NODES = 512
     RD_LATENCY = 1
     WR_LATENCY = 1
     OUTREG_WIDTH = 16
     NumRuns = 1
-    NumOps = 64
+    NumOps = 128
     search_nclks_list = []
     enq_nclks_list = []
     tot_enq_nclks_list = []
@@ -52,8 +52,7 @@ def test(env):
             sl.deq_in_pipe.put(True)
             (val, hsp, mdp, deq_nclks) = yield sl.deq_out_pipe.get()
             print ('deq: {} - {} clks'.format(val, deq_nclks))
-            #yield env.timeout(13*PERIOD)
-            #print (sl.outreg.val)
+            yield env.timeout(13*PERIOD)
             print (sl)
             deq_nclks_list.append(deq_nclks)
 

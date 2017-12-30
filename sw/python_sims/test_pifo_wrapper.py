@@ -5,14 +5,14 @@ from statistics import mean
 from pifo_wrapper import SkipListWrapper
 
 def test(env):
-    NUM_SKIP_LISTS = 2
+    NUM_SKIP_LISTS = 4
     PERIOD = 1
     MAX_NODES = 512
-    OUTREG_WIDTH = 4
+    OUTREG_WIDTH = 2
     CLK_FREQ = 200 # MHz
     PKT_RATE = 14.8 # MPkts/sec
     PKT_INTERVAL = int(CLK_FREQ/PKT_RATE)
-    NumRuns = 1
+    NumRuns = 10
     NumOps = 128
     enq_nclks_list = []
     deq_nclks_list = []
@@ -34,11 +34,8 @@ def test(env):
         for i in range (NumOps):
             val = random.randint(0,100)
             hsp = mdp = -1
-            t1 = env.now
-            #print ('test_pifo_wrapper enq start:', t1)
             slw.enq_in_pipe.put((val, hsp, mdp))
             enq_nclks = yield slw.enq_out_pipe.get()
-            #print ('test_pifo_wrapper enq end:', env.now)
             enq_nclks_list.append(enq_nclks)
             print ('enq: {} - {} clks'.format(val, enq_nclks))
             yield env.timeout(PKT_INTERVAL)
