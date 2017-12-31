@@ -6,8 +6,8 @@ from pifo_skip_list import SkipList
 
 class SkipListWrapper(SkipList):
     
-    def __init__(self, env, enq_in_pipe, enq_out_pipe, deq_in_pipe, deq_out_pipe, num_sl, period, size, outreg_width, rd_latency, wr_latency):
-        super(SkipListWrapper, self).__init__(env, period, size, outreg_width, rd_latency, wr_latency)
+    def __init__(self, env, enq_in_pipe, enq_out_pipe, deq_in_pipe, deq_out_pipe, num_sl, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency):
+        super(SkipListWrapper, self).__init__(env, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency)
         self.env = env
         self.num_sl = num_sl
         self.period = period
@@ -20,7 +20,7 @@ class SkipListWrapper(SkipList):
         self.num_entries = 0
         
         for i in range(num_sl):
-            self.sl.append(SkipList(env, self.period, size, outreg_width, rd_latency, wr_latency))
+            self.sl.append(SkipList(env, self.period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency))
 
         # register processes for simulation
         self.run(env)

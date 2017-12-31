@@ -33,8 +33,8 @@ def test_mem_latency():
 
 
 def main():
-    test_fill_level()
-    #test_num_skipLists()
+    #test_fill_level()
+    test_num_skipLists()
     #test_pkt_len()
     #test_mem_latency()
 

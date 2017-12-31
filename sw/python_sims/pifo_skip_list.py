@@ -12,12 +12,14 @@ VAL = 0
 LEFT = 5
 
 class SkipList(HW_sim_object):
-    def __init__(self, env, period, size, outreg_width, rd_latency, wr_latency):
+    def __init__(self, env, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency):
         super(SkipList, self).__init__(env, period)
 
         self.env = env
         self.period = period
         self.outreg_width = outreg_width
+        self.enq_fifo_depth = enq_fifo_depth
+        
         # Process communication pipes
         self.search_in_pipe = simpy.Store(env)
         self.search_out_pipe = simpy.Store(env)
@@ -38,10 +40,13 @@ class SkipList(HW_sim_object):
         depth = size
         self.nodes = BRAM(self.env, period, self.nodes_r_in_pipe, self.nodes_r_out_pipe, self.nodes_w_in_pipe, self.nodes_w_out_pipe,
                           depth, wr_latency, rd_latency)
-        # Output register on dequeue side
-        self.outreg = out_reg(self.env, period, self.outreg_ins_in_pipe, self.outreg_ins_out_pipe, self.outreg_rem_in_pipe, self.outreg_rem_out_pipe, outreg_width)
         # FIFO for free node list
         self.free_node_list = Fifo(size)
+        # Output register on dequeue side
+        self.outreg = out_reg(self.env, period, self.outreg_ins_in_pipe, self.outreg_ins_out_pipe, self.outreg_rem_in_pipe, self.outreg_rem_out_pipe, outreg_width)
+        # FIFO for enqueing into the skip list
+        self.enq_fifo = Fifo(enq_fifo_depth)
+        
         # Set current size and max level to zero
         self.num_entries = 0
         self.currMaxLevel = 0
@@ -60,11 +65,13 @@ class SkipList(HW_sim_object):
         # Busy flag
         self.busy = 1
         
-        # Data available flag
-        self.avail = 0
-        
         # Next value to be output
         self.next_val = None
+        
+        # Lists to store time measurements
+        self.bg_search_nclks_list = []
+        self.bg_enq_nclks_list = []
+        self.bg_deq_nclks_list = []
         
         # register processes for simulation
         self.run(env)
@@ -74,6 +81,7 @@ class SkipList(HW_sim_object):
         self.env.process(self.search())
         self.env.process(self.enqueue())
         self.env.process(self.dequeue())
+        self.enq_sl_proc = self.env.process(self.enq_sl())
         self.deq_sl_proc = self.env.process(self.deq_sl())
     
     def __str__(self):
@@ -182,83 +190,87 @@ class SkipList(HW_sim_object):
             nclks = self.env.now - t1
             self.search_out_pipe.put((n, dn, nclks))
 
+    def enq_sl (self):
+        while True:
+            try:
+                yield self.env.timeout(self.period)
+                # If enq_fifo not empty and there's room in skip list, process entry
+                if self.enq_fifo.fill_level() > 0 and self.free_node_list.fill_level() >= (self.currMaxLevel + 1) and self.busy == 0:
+                    #print ("enq_sl:", self.env.now)
+                    self.busy = 1
+                    t1 = self.env.now
+                    (value, (hsp, mdp)) = self.enq_fifo.pop()
+
+                    # Update max level
+                    self.currMaxLevel = int(math.log(self.num_entries-self.outreg.num_entries, 2))
+                    # Generate random number between 0 and current max level (inclusive)
+                    level = random.randint(0, self.currMaxLevel)
+                    # Start search from head of skip list
+                    startNode = self.head[self.currMaxLevel]
+                    uNode = -1
+                    search_nclks_tot = 0
+                    # Insert new nodes at each level starting at randomly selected level and descending to level zero
+                    while level >= 0:
+                        # Find insertion point at this level starting from the closest preceding node
+                        self.search_in_pipe.put((startNode, level, value))
+                        (n, startNode, search_nclks) = yield self.search_out_pipe.get()
+                        search_nclks_tot += search_nclks
+                        # Read node at insertion point
+                        self.nodes_r_in_pipe.put(n)
+                        lVal, lHsp, lMdp, lLvl, lR, lL, lU, lD = yield self.nodes_r_out_pipe.get()
+                        # Get new node from free list
+                        newNode = self.free_node_list.pop()
+                        # Connect left neighbor to new node
+                        self.nodes_w_in_pipe.put((n, [lVal, lHsp, lMdp, lLvl, newNode, lL, lU, lD]))
+                        yield self.nodes_w_out_pipe.get()
+                        # Connect right neighbor
+                        self.nodes_r_in_pipe.put(lR)
+                        rVal, rHsp, rMdp, rLvl, rR, rL, rU, rD = yield self.nodes_r_out_pipe.get()
+                        self.nodes_w_in_pipe.put((lR, [rVal, rHsp, rMdp, rLvl, rR, newNode, rU, rD]))
+                        yield self.nodes_w_out_pipe.get()
+                        # Connect with level above if any
+                        if uNode != -1:
+                            self.nodes_r_in_pipe.put(uNode)
+                            uVal, uHsp, uMdp, uLvl, uR, uL, uU, uD = yield self.nodes_r_out_pipe.get()
+                            self.nodes_w_in_pipe.put((uNode, [uVal, uHsp, uMdp, uLvl, uR, uL, uU, newNode]))
+                            yield self.nodes_w_out_pipe.get()
+                        # Connect new node to l/r neighbors on same level and up.  Down ptr is connected in next cycle
+                        newVal, newHsp, newMdp, newLvl, newR, newL = value, hsp, mdp, level, lR, n
+                        self.nodes_w_in_pipe.put((newNode, [newVal, newHsp, newMdp, newLvl, newR, newL, uNode, -1]))
+                        yield self.nodes_w_out_pipe.get()
+                        uNode = newNode
+                        uVal, uHsp, uMdp, uLvl, uR, uL, uU = newVal, newHsp, newMdp, newLvl, newR, newL, newNode
+                        # Next level down
+                        level -= 1
+                    # Write time measurements to lists
+                    self.bg_search_nclks_list.append(search_nclks_tot)
+                    enq_nclks = self.env.now - t1 - search_nclks_tot
+                    self.bg_enq_nclks_list.append(enq_nclks)
+                    self.busy = 0
+            
+            except simpy.Interrupt as i:
+                print ("enq_sl stopped")
+                break
+
     def enqueue (self):
         while True:
-            # wait for enqueue command
+            # Wait for enqueue command
             (value, hsp, mdp) = yield self.enq_in_pipe.get()
-            # Exit if free list does not have enough elements to add nodes at all levels
-            if len(self.free_node_list.items) < (self.currMaxLevel + 1):
-                print ("Free list almost empty")
-                self.enq_out_pipe.put((0, 0))
-                continue
-            while (self.busy == 1):
-                yield self.env.timeout(self.period)
             t1 = self.env.now
-            self.num_entries += 1
-            self.busy = 1
+            # Wait if out reg and enqueue FIFO are full
+            while (self.outreg.num_entries == self.outreg.width and self.enq_fifo.fill_level() == self.enq_fifo_depth) or self.outreg.busy == 1:
+                yield self.env.timeout(self.period)
             # Insert into output reg
             self.outreg_ins_in_pipe.put((value, [hsp, mdp]))
             (out_reg_val, out_reg_ptrs) = yield self.outreg_ins_out_pipe.get()
-            if out_reg_val == -1:
-                # Entry was inserted directly into out reg.  Nothing left to do
-                self.next = self.outreg.next
-                self.busy = 0
-                self.avail = 1
-                enq_nclks = self.env.now - t1
-                self.enq_out_pipe.put((0, enq_nclks))
-                continue
-            else:
-                # out reg insert return an entry (either same new entry or one that was evicted from out reg)
-                # update the entry in case it is different and continue to insert in skip list
-                value = out_reg_val
-                hsp, mdp = out_reg_ptrs
-
-            # Update max level
-            self.currMaxLevel = int(math.log(self.num_entries-self.outreg.num_entries, 2))
-            # Generate random number between 0 and current max level (inclusive)
-            level = random.randint(0, self.currMaxLevel)
-            # Start search from head of skip list
-            startNode = self.head[self.currMaxLevel]
-            uNode = -1
-            search_nclks_tot = 0
-            # Insert new nodes at each level starting at randomly selected level and descending to level zero
-            while level >= 0:
-                # Find insertion point at this level starting from the closest preceding node
-                self.search_in_pipe.put((startNode, level, value))
-                (n, startNode, search_nclks) = yield self.search_out_pipe.get()
-                search_nclks_tot += search_nclks
-                # Read node at insertion point
-                self.nodes_r_in_pipe.put(n)
-                lVal, lHsp, lMdp, lLvl, lR, lL, lU, lD = yield self.nodes_r_out_pipe.get()
-                # Get new node from free list
-                newNode = self.free_node_list.pop()
-                # Connect left neighbor to new node
-                self.nodes_w_in_pipe.put((n, [lVal, lHsp, lMdp, lLvl, newNode, lL, lU, lD]))
-                yield self.nodes_w_out_pipe.get()
-                # Connect right neighbor
-                self.nodes_r_in_pipe.put(lR)
-                rVal, rHsp, rMdp, rLvl, rR, rL, rU, rD = yield self.nodes_r_out_pipe.get()
-                self.nodes_w_in_pipe.put((lR, [rVal, rHsp, rMdp, rLvl, rR, newNode, rU, rD]))
-                yield self.nodes_w_out_pipe.get()
-                # Connect with level above if any
-                if uNode != -1:
-                    self.nodes_r_in_pipe.put(uNode)
-                    uVal, uHsp, uMdp, uLvl, uR, uL, uU, uD = yield self.nodes_r_out_pipe.get()
-                    self.nodes_w_in_pipe.put((uNode, [uVal, uHsp, uMdp, uLvl, uR, uL, uU, newNode]))
-                    yield self.nodes_w_out_pipe.get()
-                # Connect new node to l/r neighbors on same level and up.  Down ptr is connected in next cycle
-                newVal, newHsp, newMdp, newLvl, newR, newL = value, hsp, mdp, level, lR, n
-                self.nodes_w_in_pipe.put((newNode, [newVal, newHsp, newMdp, newLvl, newR, newL, uNode, -1]))
-                yield self.nodes_w_out_pipe.get()
-                uNode = newNode
-                uVal, uHsp, uMdp, uLvl, uR, uL, uU = newVal, newHsp, newMdp, newLvl, newR, newL, newNode
-                # Next level down
-                level -= 1
-            # Output enq done
-            enq_nclks = self.env.now - t1 - search_nclks_tot
-            self.enq_out_pipe.put((search_nclks_tot, enq_nclks))
-            self.busy = 0
-            self.avail = 1
+            if out_reg_val != -1:
+                # out reg insert returned an entry (either same new entry or one that was evicted from out reg)
+                # push entry into enqueue FIFO
+                self.enq_fifo.push((out_reg_val, out_reg_ptrs))
+                    
+            enq_nclks = self.env.now - t1
+            self.enq_out_pipe.put((0, enq_nclks))
+            self.num_entries += 1
 
     def deq_sl (self):
         while True:
@@ -267,7 +279,7 @@ class SkipList(HW_sim_object):
                 yield self.env.timeout(self.period)
                 # If there's room in out reg and there are entries in skip list and it's not busy
                 if (self.outreg.num_entries < self.outreg.width) and self.num_entries > self.outreg.num_entries and self.busy == 0:
-                    #print ("started deq_sel @", self.env.now)
+                    t1 = self.env.now
                     self.busy = 1
                     # Point to tail node in level 0
                     t = self.tail[0]
@@ -284,7 +296,6 @@ class SkipList(HW_sim_object):
                     # tmpVal should be -1 because there was room available in out reg
                     if tmpVal != -1:
                         print ("Dequeue Error!: Received non-null value from out reg:", tmpVal, tmpPtrs)
-                    self.avail = 1
                 
                     # Read left neighbor
                     self.nodes_r_in_pipe.put(dqL)
@@ -356,7 +367,8 @@ class SkipList(HW_sim_object):
                             # Move right
                             r = rR
  
-                    #print ("finished deq_sl @", self.env.now)
+                    deq_nclks = self.env.now - t1
+                    self.bg_deq_nclks_list.append(deq_nclks)
                     self.busy = 0
 
             except simpy.Interrupt as i:
