@@ -4,7 +4,7 @@ from pifo_sim import Pifo_sim
 
 def test_fill_level():
     psim = Pifo_sim('out')
-    levels = range(1, 200, 20)
+    levels = range(1, 200, 5)
     pkt_len = 64
     num_skipLists = 1
     psim.test_fill_level(levels, pkt_len, num_skipLists)
@@ -31,12 +31,20 @@ def test_mem_latency():
     mem_latencies = range(1,7)
     psim.test_mem_latency(level, pkt_len, num_skipLists, mem_latencies)
 
+def test_outreg_width():
+    psim = Pifo_sim('out')
+    level = None # do not use specific fill level 
+    pkt_len = 64
+    num_skipLists = 1
+    outreg_widths = range(1,102,5)
+    psim.test_outreg_width(level, pkt_len, num_skipLists, outreg_widths)
 
 def main():
     #test_fill_level()
-    test_num_skipLists()
+    #test_num_skipLists()
     #test_pkt_len()
     #test_mem_latency()
+    test_outreg_width()
 
 
 if __name__ == "__main__":

@@ -22,11 +22,9 @@ class Pifo_tb(HW_sim_object):
     """The top level testbench for the PIFO
     """
 
-    def __init__(self, env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, rd_latency=1, wr_latency=1):
+    def __init__(self, env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, enq_fifo_depth, rd_latency=1, wr_latency=1):
         super(Pifo_tb, self).__init__(env, period)
 
-        self.env = env
-        self.period = period
         self.num_samples = num_samples
         self.num_skipLists = num_skipLists
         self.sim_complete = False
@@ -60,23 +58,31 @@ class Pifo_tb(HW_sim_object):
         self.pkt_id = 0
         self.active_pkts = OrderedDict()
 
+        # bool to indicate that dequeuing should start
+        self.start_deq = False
+
         # latency measurements
         self.enq_latencies = []
         self.deq_latencies = []
 
         # Instantiate the top-level Pifo
-        self.pifo = Pifo_top(env, period, self.pifo_pkt_in_pipe, self.pifo_pkt_out_pipe, self.pifo_enq_out_pipe, self.pifo_deq_in_pipe, MAX_SEGMENTS, MAX_PKTS, num_skipLists, outreg_width, rd_latency=rd_latency, wr_latency=wr_latency)
+        self.pifo = Pifo_top(env, period, self.pifo_pkt_in_pipe, self.pifo_pkt_out_pipe, self.pifo_enq_out_pipe, self.pifo_deq_in_pipe, MAX_SEGMENTS, MAX_PKTS, num_skipLists, outreg_width, enq_fifo_depth, rd_latency=rd_latency, wr_latency=wr_latency)
+
+        # determine whether we want to gen/read pkts such that a constant fill level is maintained
+        const_fill_level = True
+        if fill_level is None:
+            const_fill_level = False
 
         # register processes for simulation
-        self.run()
+        self.run(const_fill_level)
 
 
-    def run(self):
-        self.env.process(self.generate_pkts())
-        self.env.process(self.receive_pkts())
+    def run(self, const_fill_level):
+        self.env.process(self.generate_pkts(const_fill_level))
+        self.env.process(self.receive_pkts(const_fill_level))
 
 
-    def generate_pkts(self):
+    def generate_pkts(self, const_fill_level):
         """Generate scapy pkts and insert into PIFO
         """
         # the last clk cycle at which a pkt was sent
@@ -96,8 +102,17 @@ class Pifo_tb(HW_sim_object):
 
             # send a packet if the not at the desired fill level
             num_entries = self.pifo.skip_list_wrapper.num_entries
-            if num_entries < self.fill_level:
+
+            # check condition to generate new pkt
+            if not const_fill_level and self.pkt_id < self.num_samples:
+                gen_pkt = True
+            elif const_fill_level and num_entries < self.fill_level:
+                gen_pkt = True
                 yield self.env.timeout(WRITE_DELAY)
+            else:
+                gen_pkt = False
+
+            if gen_pkt:
                 # create pkt and metadata to send
                 pkt = Ether()/IP()/TCP()
                 pkt = pad_pkt(pkt, self.pkt_len)
@@ -123,18 +138,32 @@ class Pifo_tb(HW_sim_object):
                 end_time = self.env.now
 
                 enq_nclks = end_time - start_time
-                if num_entries == self.fill_level - 1:
+                if not const_fill_level:
+                    # record enq delay for all pkts
+                    self.active_pkts[pkt_id] = enq_nclks
+                    # start dequeuing when all pkts have been sent
+                    if self.pkt_id >= self.num_samples:
+                        self.start_deq = True
+                elif const_fill_level and num_entries == self.fill_level - 1:
+                    # record enq delay for only pkts dequeued at the desired fill level
                     self.active_pkts[pkt_id] = enq_nclks
 
 
-    def receive_pkts(self):
+
+    def receive_pkts(self, const_fill_level):
         """Receive pkts from PIFO
         """
-        last_interval = 0
         while not self.sim_complete:
-            # only submit read requests if the skip list is full enough
-            if self.pifo.skip_list_wrapper.num_entries >= self.fill_level:
+            # check condition to submit read request
+            if not const_fill_level and self.start_deq:
+                read_pkt = True
+            elif const_fill_level and self.pifo.skip_list_wrapper.num_entries >= self.fill_level:
+                read_pkt = True
                 yield self.env.timeout(READ_DELAY)
+            else:
+                read_pkt = False
+
+            if read_pkt:
                 start_time = self.env.now
                 # submit read request 
                 self.pifo_deq_in_pipe.put(1)
@@ -148,7 +177,7 @@ class Pifo_tb(HW_sim_object):
                     rcv_time = self.env.now
                     pkt_id = meta_out.pkt_id
                     enq_nclks = self.active_pkts.pop(pkt_id, None)
-                    # only care about packets enqueued at the fill level
+                    # only care about packets for which we have recorded enq delay
                     if enq_nclks is not None:
                         self.enq_latencies.append(enq_nclks)
                         self.deq_latencies.append(deq_nclks)
@@ -161,7 +190,8 @@ class Pifo_tb(HW_sim_object):
         # Wait until skip lists are done
         for i in range(self.num_skipLists):
             while self.pifo.skip_list_wrapper.sl[i].busy == 1:
-                yield self.env.timeout(self.period)
+                yield self.wait_clock()
             # Stop deq_sl processes
+            self.pifo.skip_list_wrapper.sl[i].enq_sl_proc.interrupt('Done')
             self.pifo.skip_list_wrapper.sl[i].deq_sl_proc.interrupt('Done')
 
