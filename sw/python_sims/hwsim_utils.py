@@ -24,7 +24,7 @@ class Fifo(object):
         if len(self.items) < self.maxsize:
             self.items.append(item)
         else:
-            print >> sys.stderr, "ERROR: attempted to add to full free list"
+            print >> sys.stderr, "ERROR: attempted to write to full FIFO"
 
     def pop(self):
         if len(self.items) > 0:
@@ -32,8 +32,11 @@ class Fifo(object):
             self.items = self.items[1:]
             return item
         else:
-            print >> sys.stderr, "ERROR: attempted to read from empty free list"
+            print >> sys.stderr, "ERROR: attempted to read from empty FIFO"
             return None
+
+    def fill_level(self):
+        return (len(self.items))
 
     def __str__(self):
         return str(self.items)
@@ -278,6 +281,7 @@ class out_reg(HW_sim_object):
         self.num_entries = 0
         self.next = -1
         self.next_valid = 0
+        self.busy = 0
         
         # register processes for simulation
         self.run()
@@ -290,7 +294,9 @@ class out_reg(HW_sim_object):
         while True:
             # Wait for insert request
             (val, ptrs) = yield self.ins_in_pipe.get()
+            self.busy = 1
             self.next_valid = 0
+            yield self.wait_clock()
             # Room available in register, just add the entry to the register
             if self.num_entries < self.width:
                 self.val[self.num_entries] = val
@@ -318,11 +324,13 @@ class out_reg(HW_sim_object):
             # Output min value
             self.next = min(self.val[:self.num_entries])
             self.next_valid = 1
-
+            self.busy = 0
+            
     def remove(self):
         while True:
             # Wait for remove request
             yield self.rem_in_pipe.get()
+            self.busy = 1
             self.next_valid = 0
             yield self.wait_clock()
             # Find min value in register
@@ -337,7 +345,8 @@ class out_reg(HW_sim_object):
             if self.num_entries > 0:
                 self.next = min(self.val[:self.num_entries])
                 self.next_valid = 1
-            
+            self.busy = 0
+           
             # Send removed value through pipe
             self.rem_out_pipe.put((min_val, min_ptrs))
 

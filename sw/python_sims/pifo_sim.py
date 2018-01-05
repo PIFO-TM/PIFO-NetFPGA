@@ -55,17 +55,17 @@ class Pifo_sim(object):
         print 'testing outreg width...'
         results = []
         for width in outreg_widths:
-            sim_res = self.run_sim(level, pkt_len, num_skipLists, outreg_width=width)
+            sim_res = self.run_sim(level, pkt_len, num_skipLists, outreg_width=width, enq_fifo_depth=16)
             print 'finished sim for outreg width = {}'.format(width)
             results.append(sim_res)
         self.plot_results(outreg_widths, results, 'outreg_width', 'upper right', 'nodes')
 
-    def run_sim(self, fill_level, pkt_len, num_skipLists, num_samples=100, outreg_width=1, rd_latency=1, wr_latency=1):
+    def run_sim(self, fill_level, pkt_len, num_skipLists, num_samples=100, outreg_width=1, enq_fifo_depth=1, rd_latency=1, wr_latency=1):
         env = simpy.Environment()
         period = 1
         snd_rate = 1 # not currently used
         # instantiate the testbench
-        ps_tb = Pifo_tb(env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, rd_latency, wr_latency)
+        ps_tb = Pifo_tb(env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, enq_fifo_depth, rd_latency, wr_latency)
         # run the simulation
         env.run()
         # collect the results
