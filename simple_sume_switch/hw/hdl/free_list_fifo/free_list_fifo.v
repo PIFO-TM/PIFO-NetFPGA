@@ -27,28 +27,22 @@
 //
 // @NETFPGA_LICENSE_HEADER_END@
 /////////////////////////////////////////////////////////////////////////////////
-// $Id: small_fifo.v 1998 2007-07-21 01:22:57Z grg $
 //
-// Module: fallthrough_small_fifo.v
+// Module: free_list_fifo.v
 // Project: utils
-// Description: small fifo with fallthrough i.e. data valid when rd is high
+// Description: A wrapper around the fallthrough_small_fifo module that just
+//   initializes the free list upon reset.
 //
-// Change history:
-//   7/20/07 -- Set nearly full to 2^MAX_DEPTH_BITS - 1 by default so that it
-//              goes high a clock cycle early.
-//   2/11/09 -- jnaous: Rewrote to make much more efficient.
-//	 5/11/11 -- hyzeng: Rewrote based on http://www.billauer.co.il/reg_fifo.html
-//                      to improve timing by adding output register
 ///////////////////////////////////////////////////////////////////////////////
 
 `timescale 1ns/1ps
 
-module fallthrough_small_fifo
+module free_list_fifo
     #(parameter WIDTH = 72,
       parameter MAX_DEPTH_BITS = 3,
       parameter PROG_FULL_THRESHOLD = 2**MAX_DEPTH_BITS - 1,
       // the number of values to add to the fifo upon reset
-      parameter MAX_VAL = 8)
+      parameter MAX_VAL = 2**MAX_DEPTH_BITS - 1)
     (
 
      input [WIDTH-1:0] din,     // Data in
@@ -56,88 +50,47 @@ module fallthrough_small_fifo
 
      input          rd_en,   // Read the next word
 
-     output reg [WIDTH-1:0]  dout,    // Data out
+     output [WIDTH-1:0] dout,    // Data out
      output         full,
      output         nearly_full,
      output         prog_full,
      output         empty,
 
      input          reset,
-     input          clk
+     input          clk,
+     output reg     reset_done
      );
+
+   localparam RST_STATE     = 1;
+   localparam NO_RST_STATE  = 2;
+   localparam NUM_STATES    = 2;
+
+   reg [NUM_STATES-1:0] state, state_next;
 
    reg [WIDTH-1:0] fifo_din;
    reg             fifo_wr_en;
 
    reg [MAX_DEPTH_BITS-1:0] cur_val_next, cur_val;
 
-   reg                   fifo_valid, middle_valid, dout_valid;
-   reg [(WIDTH-1):0]     middle_dout;
-
-   wire [(WIDTH-1):0]    fifo_dout;
-   wire                  fifo_empty, fifo_rd_en;
-   wire                  will_update_middle, will_update_dout;
-
-   // orig_fifo is just a normal (non-FWFT) synchronous or asynchronous FIFO
-   small_fifo
-     #(.WIDTH (WIDTH),
-       .MAX_DEPTH_BITS (MAX_DEPTH_BITS),
-       .PROG_FULL_THRESHOLD (PROG_FULL_THRESHOLD))
-       fifo
-        (.din           (fifo_din),
-         .wr_en         (fifo_wr_en),
-         .rd_en         (fifo_rd_en),
-         .dout          (fifo_dout),
-         .full          (full),
-         .nearly_full   (nearly_full),
-         .prog_full     (prog_full),
-         .empty         (fifo_empty),
-         .reset         (reset),
-         .clk           (clk)
+   /* Segment free list */
+   fallthrough_small_fifo #(.WIDTH(WIDTH), .MAX_DEPTH_BITS(MAX_DEPTH_BITS))
+      fifo
+        (.din         (fifo_din),     // Data in
+         .wr_en       (fifo_wr_en),       // Write enable
+         .rd_en       (rd_en),       // Read the next word
+         .dout        (dout),
+         .full        (full),
+         .prog_full   (prog_full),
+         .nearly_full (nearly_full),
+         .empty       (empty),
+         .reset       (reset),
+         .clk         (clk)
          );
 
-   assign will_update_middle = fifo_valid && (middle_valid == will_update_dout);
-   assign will_update_dout = (middle_valid || fifo_valid) && (rd_en || !dout_valid);
-   assign fifo_rd_en = (!fifo_empty) && !(middle_valid && dout_valid && fifo_valid);
-   assign empty = !dout_valid;
-
-   always @(posedge clk) begin
-      if (reset)
-         begin
-            fifo_valid <= 0;
-            middle_valid <= 0;
-            dout_valid <= 0;
-            dout <= 0;
-            middle_dout <= 0;
-         end
-      else
-         begin
-            if (will_update_middle)
-               middle_dout <= fifo_dout;
-            
-            if (will_update_dout)
-               dout <= middle_valid ? middle_dout : fifo_dout;
-            
-            if (fifo_rd_en)
-               fifo_valid <= 1;
-            else if (will_update_middle || will_update_dout)
-               fifo_valid <= 0;
-            
-            if (will_update_middle)
-               middle_valid <= 1;
-            else if (will_update_dout)
-               middle_valid <= 0;
-            
-            if (will_update_dout)
-               dout_valid <= 1;
-            else if (rd_en)
-               dout_valid <= 0;
-         end 
-     end
 
    /* Reset State Machine:
     *   - Add default values to fifo
-    */
+    */   
 
    always @(*) begin
       // default values
@@ -145,15 +98,15 @@ module fallthrough_small_fifo
       cur_val_next = cur_val;
       fifo_din = din;
       fifo_wr_en = wr_en;
+      reset_done = 1;
 
       case(state)
           RST_STATE: begin
-              if (cur_val < MAX_VAL) begin
-                  fifo_din = cur_val;
-                  fifo_wr_en = 1;
-                  cur_val_next = cur_val + 1;
-              end
-              else begin
+              reset_done = 0;
+              fifo_din = cur_val;
+              fifo_wr_en = 1;
+              cur_val_next = cur_val + 1;
+              if (cur_val == MAX_VAL) begin
                   state_next = NO_RST_STATE;
               end
           end
@@ -177,5 +130,13 @@ module fallthrough_small_fifo
          cur_val <= cur_val_next;
       end
    end
+
+//`ifdef COCOTB_SIM
+//initial begin
+//  $dumpfile ("free_list_fifo_waveform.vcd");
+//  $dumpvars (0,free_list_fifo);
+//  #1 $display("Sim running...");
+//end
+//`endif
 
 endmodule

@@ -71,12 +71,12 @@ module pifo_pkt_storage
     input                                      axis_resetn,
 
     // Master Pkt Stream Ports (outgoing pkts) 
-    output [C_M_AXIS_DATA_WIDTH - 1:0]         m_axis_pkt_tdata,
-    output [((C_M_AXIS_DATA_WIDTH / 8)) - 1:0] m_axis_pkt_tkeep,
-    output reg [C_M_AXIS_TUSER_WIDTH-1:0]      m_axis_pkt_tuser,
-    output                                     m_axis_pkt_tvalid,
-    input                                      m_axis_pkt_tready,
-    output                                     m_axis_pkt_tlast,
+    output reg [C_M_AXIS_DATA_WIDTH - 1:0]         m_axis_pkt_tdata,
+    output reg [((C_M_AXIS_DATA_WIDTH / 8)) - 1:0] m_axis_pkt_tkeep,
+    output reg [C_M_AXIS_TUSER_WIDTH-1:0]          m_axis_pkt_tuser,
+    output reg                                     m_axis_pkt_tvalid,
+    input                                          m_axis_pkt_tready,
+    output reg                                     m_axis_pkt_tlast,
 
     // Slave Pkt Stream Ports (incomming pkts)
     input [C_S_AXIS_DATA_WIDTH - 1:0]          s_axis_pkt_tdata,
@@ -87,11 +87,11 @@ module pifo_pkt_storage
     input                                      s_axis_pkt_tlast,
 
     // Master Ptr Stream Ports (outgoing ptrs)
-    output [C_M_AXIS_PTR_DATA_WIDTH - 1:0]         m_axis_ptr_tdata,
-    output [((C_M_AXIS_PTR_DATA_WIDTH / 8)) - 1:0] m_axis_ptr_tkeep,
-    output                                         m_axis_ptr_tvalid,
+    output reg  [C_M_AXIS_PTR_DATA_WIDTH - 1:0]         m_axis_ptr_tdata,
+    output reg  [((C_M_AXIS_PTR_DATA_WIDTH / 8)) - 1:0] m_axis_ptr_tkeep,
+    output reg                                          m_axis_ptr_tvalid,
 //    input                                          m_axis_ptr_tready,
-    output                                         m_axis_ptr_tlast,
+    output reg                                          m_axis_ptr_tlast,
 
     // Slave Ptr Stream Ports (incomming ptrs for read request)
     input [C_S_AXIS_PTR_DATA_WIDTH - 1:0]          s_axis_ptr_tdata,
@@ -114,9 +114,10 @@ module pifo_pkt_storage
 
    //--------------------- Internal Parameters-------------------------
    /* For Insertion FSM */
-   localparam START_PKT          = 1;
-   localparam FINISH_PKT         = 2;
-   localparam IFSM_NUM_STATES    = 2;
+   localparam START_WORD         = 1;
+   localparam WORD_ONE           = 2;
+   localparam WORD_TWO           = 4;
+   localparam IFSM_NUM_STATES    = 3;
 
    /* For Removal FSM */
    localparam WAIT_REQUEST         = 1;
@@ -135,7 +136,10 @@ module pifo_pkt_storage
 
    localparam TOTAL_SEG_SIZE = SEG_SIZE + SEG_ADDR_WIDTH + 2*(C_S_AXIS_DATA_WIDTH / 8);
 
+   localparam SEG_ADDR_WIDTH = 10;
    localparam SEG_BRAM_DEPTH = 1024;
+
+   localparam META_ADDR_WIDTH = 10;
    localparam META_BRAM_DEPTH = 1024;
 
    localparam NULL = -1; // Is this valid?
@@ -144,18 +148,18 @@ module pifo_pkt_storage
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
 
-   wire [SEG_ADDR_WIDTH-1:0] seg_fl_addr_in;
-   wire seg_fl_wr_en;
-   wire seg_fl_rd_en;
-   wire seg_fl_empty;
-   wire seg_fl_full;
+   reg  [SEG_ADDR_WIDTH-1:0] seg_fl_addr_in;
+   reg                       seg_fl_wr_en;
+   reg                       seg_fl_rd_en;
+   wire                      seg_fl_empty;
+   wire                      seg_fl_full;
    wire [SEG_ADDR_WIDTH-1:0] seg_fl_addr_out;
 
-   wire [META_ADDR_WIDTH-1:0] meta_fl_addr_in;
-   wire meta_fl_wr_en;
-   wire meta_fl_rd_en;
-   wire meta_fl_empty;
-   wire meta_fl_full;
+   reg  [META_ADDR_WIDTH-1:0] meta_fl_addr_in;
+   reg                        meta_fl_wr_en;
+   reg                        meta_fl_rd_en;
+   wire                       meta_fl_empty;
+   wire                       meta_fl_full;
    wire [META_ADDR_WIDTH-1:0] meta_fl_addr_out;
 
    reg                                       seg_bram_wr_we;
@@ -174,6 +178,7 @@ module pifo_pkt_storage
    reg   [C_S_AXIS_DATA_WIDTH-1:0]           seg_word_one_tdata_next;
    reg   [(C_S_AXIS_DATA_WIDTH/8)-1:0]       seg_word_one_tkeep;
    reg   [(C_S_AXIS_DATA_WIDTH/8)-1:0]       seg_word_one_tkeep_next;
+   reg   [SEG_ADDR_WIDTH-1:0]                next_seg_ptr;
    reg   [SEG_ADDR_WIDTH-1:0]                cur_seg_ptr;
    reg   [SEG_ADDR_WIDTH-1:0]                cur_seg_ptr_next;
 
@@ -201,7 +206,7 @@ module pifo_pkt_storage
    //-------------------- Modules and Logic ---------------------------
   
    /* Segment free list */
-   fallthrough_small_fifo #(.WIDTH(SEG_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(SEG_BRAM_DEPTH)))
+   free_list_fifo #(.WIDTH(SEG_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(SEG_BRAM_DEPTH)), .MAX_VAL(SEG_BRAM_DEPTH-1))
       seg_fl_fifo
         (.din         (seg_fl_addr_in),     // Data in
          .wr_en       (seg_fl_wr_en),                                // Write enable
@@ -216,7 +221,7 @@ module pifo_pkt_storage
          );
 
    /* Metadata free list */
-   fallthrough_small_fifo #(.WIDTH(META_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(META_BRAM_DEPTH)))
+   free_list_fifo #(.WIDTH(META_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(META_BRAM_DEPTH)), .MAX_VAL(META_BRAM_DEPTH-1))
       meta_fl_fifo
         (.din         (meta_fl_addr_in),     // Data in
          .wr_en       (meta_fl_wr_en),                                // Write enable
@@ -263,7 +268,7 @@ module pifo_pkt_storage
     */
 
    // Want to make sure the free lists are not empty in the state that we are reading from them
-   assign s_axis_pkt_tready = (~meta_fl_empty & ~seg_fl_empty & (ifsm_state==START_WORD || ifsm_state==WORD_TWO)) | ifsm_state==WORD_ONE;
+   assign s_axis_pkt_tready = (~meta_fl_empty & ~seg_fl_empty & (ifsm_state==START_WORD || ifsm_state==WORD_TWO)) || ifsm_state==WORD_ONE;
 
    always @(*) begin
       // default values
@@ -277,10 +282,17 @@ module pifo_pkt_storage
       seg_word_one_tkeep_next = seg_word_one_tkeep;
       cur_seg_ptr_next = cur_seg_ptr;
 
+      seg_bram_wr_we = 0;
+      seg_bram_wr_addr = 0;
+      seg_bram_din = 0;
+
       m_axis_ptr_tdata = 0;
       m_axis_ptr_tvalid = 0;
       m_axis_ptr_tkeep = 0;
       m_axis_ptr_tlast = 1;
+
+      next_seg_ptr = NULL;
+      
 
       case(ifsm_state)
           START_WORD: begin
@@ -289,13 +301,13 @@ module pifo_pkt_storage
                   // Get head_seg_ptr and meta_ptr and write onto m_axis_ptr_* bus
                   m_axis_ptr_tdata = {seg_fl_addr_out, meta_fl_addr_out};
                   m_axis_ptr_tvalid = 1;
-                  m_axis_ptr_tkeep = {SEG_ADDR_WIDTH{'b1}, META_ADDR_WIDTH{'b1}};
+                  m_axis_ptr_tkeep = {{SEG_ADDR_WIDTH{1'b1}}, {META_ADDR_WIDTH{1'b1}}};
                   seg_fl_rd_en = 1;
                   meta_fl_rd_en = 1;
                   // Write the metadata into meta_bram
                   meta_bram_wr_we = 1;
                   meta_bram_wr_addr = meta_fl_addr_out;
-                  meta_bram_din = s_axis_tuser;
+                  meta_bram_din = s_axis_pkt_tuser;
                   // Register the first word of the segment, the tkeep data, and the address to write to
                   seg_word_one_tdata_next = s_axis_pkt_tdata;
                   seg_word_one_tkeep_next = s_axis_pkt_tkeep;
@@ -314,7 +326,7 @@ module pifo_pkt_storage
                       // If this is the end of the pkt => write into segment_bram
                       seg_bram_wr_we = 1;
                       seg_bram_wr_addr = cur_seg_ptr;
-                      seg_bram_wr_din = {s_axis_pkt_tdata, s_axis_pkt_tkeep, C_S_AXIS_DATA_WIDTH{1'b0}, (C_S_AXIS_DATA_WIDTH/8){1'b0}, NULL};
+                      seg_bram_din = {s_axis_pkt_tdata, s_axis_pkt_tkeep, {C_S_AXIS_DATA_WIDTH{1'b0}}, {(C_S_AXIS_DATA_WIDTH/8){1'b0}}, NULL};
                       // transition to START_WORD
                       ifsm_state_next = START_WORD;
                   end
@@ -335,14 +347,14 @@ module pifo_pkt_storage
                   end 
                   else begin
                       // Else => set next_seg_ptr = seg_fl_addr_out, and read from seg free list
-                      next_seg_ptr == seg_fl_addr_out;
+                      next_seg_ptr = seg_fl_addr_out;
                       seg_fl_rd_en = 1;
                       ifsm_state_next = WORD_ONE;
                   end
                   // Write current word of the pkt along with the registered word into segment_bram
                   seg_bram_wr_we = 1;
                   seg_bram_wr_addr = cur_seg_ptr;
-                  seg_bram_wr_din = {seg_word_one_tdata, seg_word_one_tkeep, s_axis_pkt_tdata, s_axis_pkt_tkeep, next_seg_ptr};
+                  seg_bram_din = {seg_word_one_tdata, seg_word_one_tkeep, s_axis_pkt_tdata, s_axis_pkt_tkeep, next_seg_ptr};
                   // cur seg ptr to the next seg ptr
                   cur_seg_ptr_next = next_seg_ptr;
               end
@@ -456,7 +468,7 @@ module pifo_pkt_storage
                   m_axis_pkt_tvalid_reg_next = 1;
                   m_axis_pkt_tdata_reg_next = seg_word_one_tdata_out;
                   m_axis_pkt_tkeep_reg_next = seg_word_one_tkeep_out;
-                  m_axis_pkt_tuser_reg_next = meta_bram_dout
+                  m_axis_pkt_tuser_reg_next = meta_bram_dout;
 
                   // Register second word of pkt, tkeep data, and next_seg_ptr
                   seg_word_two_tdata_next = seg_word_two_tdata_out;
@@ -603,6 +615,14 @@ module pifo_pkt_storage
          seg_word_two_tkeep <= seg_word_two_tkeep_next;
       end
    end
+
+`ifdef COCOTB_SIM
+initial begin
+  $dumpfile ("pifo_pkt_storage_waveform.vcd");
+  $dumpvars (0,pifo_pkt_storage);
+  #1 $display("Sim running...");
+end
+`endif
    
 endmodule // pifo_pkt_storage
 
