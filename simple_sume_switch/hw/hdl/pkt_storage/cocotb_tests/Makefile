@@ -18,6 +18,8 @@ VERILOG_SOURCES += $(PWD)/../pifo_pkt_storage.v
 
 MODULE=test_pifo_pkt_storage
 
+# PYTHONPATH=$(PWD)/../../../../../sw/python_sims:$(PYTHONPATH)
+
 include $(COCOTB)/makefiles/Makefile.inc
 include $(COCOTB)/makefiles/Makefile.sim
 

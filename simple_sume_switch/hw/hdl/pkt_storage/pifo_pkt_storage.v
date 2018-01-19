@@ -58,8 +58,8 @@ module pifo_pkt_storage
     parameter RANK_POS             = 32,
 
     // Ptr AXI Stream Data Width
-    parameter C_M_AXIS_PTR_DATA_WIDTH  = 64,
-    parameter C_S_AXIS_PTR_DATA_WIDTH  = 64,
+    parameter C_M_AXIS_PTR_DATA_WIDTH  = 24,
+    parameter C_S_AXIS_PTR_DATA_WIDTH  = 24,
 
     // Storage parameters
     parameter SEG_SIZE = 512
@@ -88,14 +88,12 @@ module pifo_pkt_storage
 
     // Master Ptr Stream Ports (outgoing ptrs)
     output reg  [C_M_AXIS_PTR_DATA_WIDTH - 1:0]         m_axis_ptr_tdata,
-    output reg  [((C_M_AXIS_PTR_DATA_WIDTH / 8)) - 1:0] m_axis_ptr_tkeep,
     output reg                                          m_axis_ptr_tvalid,
 //    input                                          m_axis_ptr_tready,
     output reg                                          m_axis_ptr_tlast,
 
     // Slave Ptr Stream Ports (incomming ptrs for read request)
     input [C_S_AXIS_PTR_DATA_WIDTH - 1:0]          s_axis_ptr_tdata,
-    input [((C_S_AXIS_PTR_DATA_WIDTH / 8)) - 1:0]  s_axis_ptr_tkeep,
     input                                          s_axis_ptr_tvalid,
 //    output                                         s_axis_ptr_tready,
     input                                          s_axis_ptr_tlast
@@ -134,13 +132,13 @@ module pifo_pkt_storage
    // NOTE: currently assumed to be 2
    localparam BRAM_READ_DLY = 2; 
 
+   localparam SEG_ADDR_WIDTH = 12;
+   localparam SEG_BRAM_DEPTH = 4096;
+
    localparam TOTAL_SEG_SIZE = SEG_SIZE + SEG_ADDR_WIDTH + 2*(C_S_AXIS_DATA_WIDTH / 8);
 
-   localparam SEG_ADDR_WIDTH = 10;
-   localparam SEG_BRAM_DEPTH = 1024;
-
-   localparam META_ADDR_WIDTH = 10;
-   localparam META_BRAM_DEPTH = 1024;
+   localparam META_ADDR_WIDTH = 12;
+   localparam META_BRAM_DEPTH = 4096;
 
    localparam NULL = -1; // Is this valid?
 
@@ -165,12 +163,14 @@ module pifo_pkt_storage
    reg                                       seg_bram_wr_we;
    reg   [SEG_ADDR_WIDTH-1:0]                seg_bram_wr_addr;
    reg   [TOTAL_SEG_SIZE-1:0]                seg_bram_din;
+   reg                                       seg_bram_rd_en;
    reg   [SEG_ADDR_WIDTH-1:0]                seg_bram_rd_addr;
    wire  [TOTAL_SEG_SIZE-1:0]                seg_bram_dout;
 
    reg                                       meta_bram_wr_we;
    reg   [META_ADDR_WIDTH-1:0]               meta_bram_wr_addr;
    reg   [C_S_AXIS_TUSER_WIDTH-1:0]          meta_bram_din;
+   reg                                       meta_bram_rd_en;
    reg   [META_ADDR_WIDTH-1:0]               meta_bram_rd_addr;
    wire  [C_S_AXIS_TUSER_WIDTH-1:0]          meta_bram_dout;
  
@@ -240,22 +240,24 @@ module pifo_pkt_storage
    segment_bram seg_bram_inst (
        .clka          (axis_aclk),    // input wire clka
        .wea           (seg_bram_wr_we),      // input wire [0 : 0] wea
-       .addra         (seg_bram_wr_addr),  // input wire [9 : 0] addra
-       .dina          (seg_bram_din),    // input wire [511 : 0] dina
+       .addra         (seg_bram_wr_addr),  // input wire [11 : 0] addra
+       .dina          (seg_bram_din),    // input wire [587 : 0] dina
        .clkb          (axis_aclk),    // input wire clkb
-       .addrb         (seg_bram_rd_addr),  // input wire [9 : 0] addrb
-       .doutb         (seg_bram_dout)  // output wire [511 : 0] doutb
+       .enb           (seg_bram_rd_en), // input wire [0 : 0] enb
+       .addrb         (seg_bram_rd_addr),  // input wire [11 : 0] addrb
+       .doutb         (seg_bram_dout)  // output wire [587 : 0] doutb
    );
 
    /* Metadata BRAM */
    metadata_bram meta_bram_inst (
        .clka          (axis_aclk),    // input wire clka
        .wea           (meta_bram_wr_we),      // input wire [0 : 0] wea
-       .addra         (meta_bram_wr_addr),  // input wire [9 : 0] addra
-       .dina          (meta_bram_din),    // input wire [31 : 0] dina
+       .addra         (meta_bram_wr_addr),  // input wire [11 : 0] addra
+       .dina          (meta_bram_din),    // input wire [127 : 0] dina
        .clkb          (axis_aclk),    // input wire clkb
-       .addrb         (meta_bram_rd_addr),  // input wire [9 : 0] addrb
-       .doutb         (meta_bram_dout)  // output wire [31 : 0] doutb
+       .enb           (meta_bram_rd_en), // input wire [0 : 0] enb
+       .addrb         (meta_bram_rd_addr),  // input wire [11 : 0] addrb
+       .doutb         (meta_bram_dout)  // output wire [127 : 0] doutb
    );
 
 
@@ -288,7 +290,6 @@ module pifo_pkt_storage
 
       m_axis_ptr_tdata = 0;
       m_axis_ptr_tvalid = 0;
-      m_axis_ptr_tkeep = 0;
       m_axis_ptr_tlast = 1;
 
       next_seg_ptr = NULL;
@@ -301,7 +302,6 @@ module pifo_pkt_storage
                   // Get head_seg_ptr and meta_ptr and write onto m_axis_ptr_* bus
                   m_axis_ptr_tdata = {seg_fl_addr_out, meta_fl_addr_out};
                   m_axis_ptr_tvalid = 1;
-                  m_axis_ptr_tkeep = {{SEG_ADDR_WIDTH{1'b1}}, {META_ADDR_WIDTH{1'b1}}};
                   seg_fl_rd_en = 1;
                   meta_fl_rd_en = 1;
                   // Write the metadata into meta_bram
@@ -326,7 +326,7 @@ module pifo_pkt_storage
                       // If this is the end of the pkt => write into segment_bram
                       seg_bram_wr_we = 1;
                       seg_bram_wr_addr = cur_seg_ptr;
-                      seg_bram_din = {s_axis_pkt_tdata, s_axis_pkt_tkeep, {C_S_AXIS_DATA_WIDTH{1'b0}}, {(C_S_AXIS_DATA_WIDTH/8){1'b0}}, NULL};
+                      seg_bram_din = {s_axis_pkt_tdata, s_axis_pkt_tkeep, {C_S_AXIS_DATA_WIDTH{1'b0}}, {(C_S_AXIS_DATA_WIDTH/8){1'b0}}, {SEG_ADDR_WIDTH{1'b1}}};
                       // transition to START_WORD
                       ifsm_state_next = START_WORD;
                   end
@@ -395,6 +395,9 @@ module pifo_pkt_storage
       seg_rd_addr_next = seg_rd_addr;
       seg_bram_rd_addr = seg_rd_addr;
 
+      meta_bram_rd_en = 1;
+      seg_bram_rd_en = 1;
+
       rfsm_cur_meta_ptr_next = rfsm_cur_meta_ptr; 
       rfsm_cur_seg_ptr_next = rfsm_cur_seg_ptr;
 
@@ -429,21 +432,25 @@ module pifo_pkt_storage
 
       case(rfsm_state)
           WAIT_REQUEST: begin
+              // no longer end of pkt
+              m_axis_pkt_tlast = 0;
+              m_axis_pkt_tlast_reg_next = 0;
+              m_axis_pkt_tvalid = 0;
+              m_axis_pkt_tvalid_reg_next = 0;
               if (s_axis_ptr_tvalid) begin
                   // Wait for the read request to arrive on s_axis_ptr_* bus (write sim error if rst_done reg is not set yet)
                   // Submit read request to both segment_bram and metadata_bram using the provided addresses (register 
                   //   the read addresses so the output doesn't change)
-                  {meta_bram_rd_addr, seg_bram_rd_addr} = s_axis_ptr_tdata;
+                  {seg_bram_rd_addr, meta_bram_rd_addr} = s_axis_ptr_tdata;
                   meta_rd_addr_next = meta_bram_rd_addr;
                   seg_rd_addr_next = seg_bram_rd_addr;
+//                  meta_bram_rd_en = 1;
+//                  seg_bram_rd_en = 1;
                   // Register the addresses
                   rfsm_cur_meta_ptr_next = meta_bram_rd_addr;
                   rfsm_cur_seg_ptr_next = seg_bram_rd_addr;
                   // Transistion to WAIT_BOTH_BRAM state
                   rfsm_state_next = WAIT_BOTH_BRAM;
-                  // no longer end of pkt
-                  m_axis_pkt_tlast = 0;
-                  m_axis_pkt_tlast_reg_next = 0;
                   // TODO: this is actually an inefficient implementation because we wait until returning to this state
                   //       before checking for another read request. Ideally, should do this one cycle earlier.
               end
@@ -490,6 +497,7 @@ module pifo_pkt_storage
 
                   if (next_seg_ptr_out != NULL && m_axis_pkt_tready) begin
                       // submit the next read request to segment_bram
+//                      seg_bram_rd_en = 1;
                       seg_bram_rd_addr = next_seg_ptr_out;
                       seg_rd_addr_next = next_seg_ptr_out;
                   end
@@ -541,6 +549,7 @@ module pifo_pkt_storage
 
               if (next_seg_ptr_out != NULL && m_axis_pkt_tready) begin
                   // submit the next read request to segment_bram
+//                  seg_bram_rd_en = 1;
                   seg_bram_rd_addr = next_seg_ptr_out;
                   seg_rd_addr_next = next_seg_ptr_out;
               end

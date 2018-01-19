@@ -23,7 +23,7 @@ def test_free_list_fifo(dut):
     dut.din = 0
     dut.wr_en = 0
     dut.rd_en = 0
- 
+
     # wait for reset to complete
     while dut.reset_done == 0:
         yield FallingEdge(dut.clk)
