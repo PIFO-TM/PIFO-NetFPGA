@@ -18,6 +18,8 @@ MAX_RANK = 64
 MAX_SEGMENTS = 2048
 MAX_PKTS = 2048
 
+WARM_UP_PKTS = 1
+
 class Pifo_tb(HW_sim_object):
     """The top level testbench for the PIFO
     """
@@ -89,6 +91,7 @@ class Pifo_tb(HW_sim_object):
         last_pkt_time = 0
         sched_index = 0
         pkt_schedule = None
+        last_rank = None
         while not self.sim_complete:
             yield self.wait_clock()
 #            if (sched_index == self.pkt_schedule_len or pkt_schedule is None):
@@ -104,7 +107,7 @@ class Pifo_tb(HW_sim_object):
             num_entries = self.pifo.skip_list_wrapper.num_entries
 
             # check condition to generate new pkt
-            if not const_fill_level and self.pkt_id < self.num_samples:
+            if not const_fill_level and self.pkt_id < self.num_samples + WARM_UP_PKTS:
                 gen_pkt = True
             elif const_fill_level and num_entries < self.fill_level:
                 gen_pkt = True
@@ -138,11 +141,21 @@ class Pifo_tb(HW_sim_object):
                 end_time = self.env.now
 
                 enq_nclks = end_time - start_time
+
+#                if enq_nclks > 30:
+#                    print 'enq_nclks > 30, after inserting rank = {}, cur pkt_id = {}'.format(last_rank, self.pkt_id)
+#                    for sl_id, sl in zip(range(len(self.pifo.skip_list_wrapper.sl)), self.pifo.skip_list_wrapper.sl):
+#                        print '-----------------------------------'
+#                        print 'sl id = {}'.format(sl_id)
+#                        print sl
+#                last_rank = rank
+
                 if not const_fill_level:
-                    # record enq delay for all pkts
-                    self.active_pkts[pkt_id] = enq_nclks
+                    # record enq delay for all but the first pkt
+                    if pkt_id != 0:
+                        self.active_pkts[pkt_id] = enq_nclks
                     # start dequeuing when all pkts have been sent
-                    if self.pkt_id >= self.num_samples:
+                    if self.pkt_id >= self.num_samples + WARM_UP_PKTS:
                         self.start_deq = True
                 elif const_fill_level and num_entries == self.fill_level - 1:
                     # record enq delay for only pkts dequeued at the desired fill level

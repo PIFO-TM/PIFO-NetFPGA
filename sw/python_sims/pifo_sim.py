@@ -24,11 +24,11 @@ class Pifo_sim(object):
             results.append(sim_res)
         self.plot_results(levels, results, 'fill_level', 'lower right', 'nodes')
 
-    def test_num_skipLists(self, level, pkt_len, num_skipLists):
+    def test_num_skipLists(self, level, pkt_len, num_skipLists, outreg_width, enq_fifo_depth):
         print 'testing num_skipLists...'
         results = []
         for num_sl in num_skipLists:
-            sim_res = self.run_sim(level, pkt_len, num_sl)
+            sim_res = self.run_sim(level, pkt_len, num_sl, outreg_width=outreg_width, enq_fifo_depth=enq_fifo_depth)
             print 'finished sim for num_sl = {}'.format(num_sl)
             results.append(sim_res)
         self.plot_results(num_skipLists, results, 'num_skip_lists', 'upper right', '')
@@ -51,11 +51,11 @@ class Pifo_sim(object):
             results.append(sim_res)
         self.plot_results(mem_latencies, results, 'mem_latency', 'lower right', 'cycles')
 
-    def test_outreg_width(self, level, pkt_len, num_skipLists, outreg_widths):
+    def test_outreg_width(self, level, pkt_len, num_skipLists, outreg_widths, enq_fifo_depth):
         print 'testing outreg width...'
         results = []
         for width in outreg_widths:
-            sim_res = self.run_sim(level, pkt_len, num_skipLists, outreg_width=width, enq_fifo_depth=16)
+            sim_res = self.run_sim(level, pkt_len, num_skipLists, outreg_width=width, enq_fifo_depth=enq_fifo_depth)
             print 'finished sim for outreg width = {}'.format(width)
             results.append(sim_res)
         self.plot_results(outreg_widths, results, 'outreg_width', 'upper right', 'nodes')
@@ -69,6 +69,7 @@ class Pifo_sim(object):
         # run the simulation
         env.run()
         # collect the results
+        
         enq_latencies = np.array(ps_tb.enq_latencies)
         deq_latencies = np.array(ps_tb.deq_latencies)
         sim_res = Sim_results(enq_latencies, deq_latencies)

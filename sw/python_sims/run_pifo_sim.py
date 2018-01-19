@@ -11,10 +11,14 @@ def test_fill_level():
 
 def test_num_skipLists():
     psim = Pifo_sim('out')
-    level = 100
+#    level = 100
+    level = None
     pkt_len = 64
+    outreg_width = 16
+    enq_fifo_depth = 16
     num_skipLists = range(1, 20, 2)
-    psim.test_num_skipLists(level, pkt_len, num_skipLists)
+#    num_skipLists = range(10, 11)
+    psim.test_num_skipLists(level, pkt_len, num_skipLists, outreg_width, enq_fifo_depth)
 
 def test_pkt_len():
     psim = Pifo_sim('out')
@@ -37,7 +41,8 @@ def test_outreg_width():
     pkt_len = 64
     num_skipLists = 1
     outreg_widths = range(1,102,5)
-    psim.test_outreg_width(level, pkt_len, num_skipLists, outreg_widths)
+    enq_fifo_depth = 16
+    psim.test_outreg_width(level, pkt_len, num_skipLists, outreg_widths, enq_fifo_depth)
 
 def main():
     #test_fill_level()
