@@ -140,8 +140,6 @@ module pifo_pkt_storage
    localparam META_ADDR_WIDTH = 12;
    localparam META_BRAM_DEPTH = 4096;
 
-   localparam NULL = -1; // Is this valid?
-
    //---------------------- Wires and Regs ---------------------------- 
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
@@ -202,6 +200,9 @@ module pifo_pkt_storage
 
    reg [C_S_AXIS_DATA_WIDTH-1:0] seg_word_two_tdata, seg_word_two_tdata_next;
    reg [(C_S_AXIS_DATA_WIDTH/8)-1:0] seg_word_two_tkeep, seg_word_two_tkeep_next;
+
+   wire [SEG_ADDR_WIDTH-1:0]  null_seg_ptr  = {SEG_ADDR_WIDTH{1'b1}};
+   wire [META_ADDR_WIDTH-1:0] null_meta_ptr = {META_ADDR_WIDTH{1'b1}};
  
    //-------------------- Modules and Logic ---------------------------
   
@@ -292,7 +293,7 @@ module pifo_pkt_storage
       m_axis_ptr_tvalid = 0;
       m_axis_ptr_tlast = 1;
 
-      next_seg_ptr = NULL;
+      next_seg_ptr = null_seg_ptr;
       
 
       case(ifsm_state)
@@ -341,7 +342,7 @@ module pifo_pkt_storage
               if (s_axis_pkt_tvalid & s_axis_pkt_tready) begin
                   if (s_axis_pkt_tlast) begin
                       // If this is the last word of the pkt => set next_seg_ptr = NULL
-                      next_seg_ptr = NULL;
+                      next_seg_ptr = null_seg_ptr;
                       // transition to START_WORD state
                       ifsm_state_next = START_WORD;
                   end 
@@ -495,7 +496,7 @@ module pifo_pkt_storage
                       rfsm_state_next = WRITE_OUT_WORD_TWO;
                   end
 
-                  if (next_seg_ptr_out != NULL && m_axis_pkt_tready) begin
+                  if (next_seg_ptr_out != null_seg_ptr && m_axis_pkt_tready) begin
                       // submit the next read request to segment_bram
 //                      seg_bram_rd_en = 1;
                       seg_bram_rd_addr = next_seg_ptr_out;
@@ -547,7 +548,7 @@ module pifo_pkt_storage
                   rfsm_state_next = WRITE_OUT_WORD_TWO;
               end
 
-              if (next_seg_ptr_out != NULL && m_axis_pkt_tready) begin
+              if (next_seg_ptr_out != null_seg_ptr && m_axis_pkt_tready) begin
                   // submit the next read request to segment_bram
 //                  seg_bram_rd_en = 1;
                   seg_bram_rd_addr = next_seg_ptr_out;
@@ -565,7 +566,7 @@ module pifo_pkt_storage
               m_axis_pkt_tdata_reg_next = seg_word_two_tdata;
               m_axis_pkt_tkeep_reg_next = seg_word_two_tkeep;
 
-              if (rfsm_cur_seg_ptr == NULL) begin
+              if (rfsm_cur_seg_ptr == null_seg_ptr) begin
                   // this is the last word of the pkt
                   m_axis_pkt_tlast = 1;
                   m_axis_pkt_tlast_reg_next = 1;
