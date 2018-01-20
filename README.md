@@ -18,7 +18,7 @@ To run simulations:
 Hardware Simulations
 --------------------
 
-The hardware simulations are run on top of cocotb. Here are some steps to run the packet storage simulation:
+The hardware simulations are run on top of [cocotb](https://cocotb.readthedocs.io/en/latest/introduction.html). Here are some steps to run the packet storage simulation:
 
 * Install Icarus verilog from github:
 ```
