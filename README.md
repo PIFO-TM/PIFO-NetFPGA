@@ -34,6 +34,7 @@ $ sudo make install
 
 * Clone my fork of the cocotb repository: `$ git clone https://github.com/sibanez12/cocotb.git`
 * Update the `$SUME_FOLDER/tools/settings.sh` so that the `COCOTB` environment variable is pointing to the cloned repository
+* Make sure to source the `settings.sh` file: `$ source $SUME_FOLDER/tools/settings.sh`
 * Enter the packet storage directory: `$ cd simple_sume_switch/hw/hdl/pkt_storage/cocotb_tests`
 * Run the simulation: `$ make`
 
