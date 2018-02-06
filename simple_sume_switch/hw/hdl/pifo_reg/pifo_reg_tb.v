@@ -106,8 +106,8 @@ wire valid_out;
 	#(
 	.L2_MAX_SIZE(L2_MAX_SIZE),
     .RANK_WIDTH(RANK_WIDTH),
-	.META_WIDTH(META_WIDTH),
-	.ORDER(ORDER)
+	.META_WIDTH(META_WIDTH)
+//	.ORDER(ORDER)
     )
 	pifo_reg_i
     (
