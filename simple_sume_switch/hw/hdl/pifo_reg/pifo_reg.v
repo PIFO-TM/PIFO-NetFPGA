@@ -135,9 +135,9 @@ module pifo_reg
         end
     end
 
-    initial begin
-      $dumpfile ("pifo_reg_waveform.vcd");
-      $dumpvars (0,pifo_reg);
-      #1 $display("Sim running...");
-    end	
+//    initial begin
+//      $dumpfile ("pifo_reg_waveform.vcd");
+//      $dumpvars (0,pifo_reg);
+//      #1 $display("Sim running...");
+//    end	
 endmodule

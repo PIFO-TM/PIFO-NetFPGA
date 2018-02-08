@@ -95,7 +95,7 @@ module pifo_pkt_storage
     // Slave Ptr Stream Ports (incomming ptrs for read request)
     input [C_S_AXIS_PTR_DATA_WIDTH - 1:0]          s_axis_ptr_tdata,
     input                                          s_axis_ptr_tvalid,
-//    output                                         s_axis_ptr_tready,
+    output reg                                     s_axis_ptr_tready,
     input                                          s_axis_ptr_tlast
 
 );
@@ -415,6 +415,8 @@ module pifo_pkt_storage
 
       bram_rd_cycle_cnt_next = 0;
 
+      s_axis_ptr_tready = 0;
+
       // register these values so we can hold them constant when unspecified
       m_axis_pkt_tvalid = m_axis_pkt_tvalid_reg;
       m_axis_pkt_tdata = m_axis_pkt_tdata_reg;
@@ -434,6 +436,7 @@ module pifo_pkt_storage
       case(rfsm_state)
           WAIT_REQUEST: begin
               // no longer end of pkt
+              s_axis_ptr_tready = 1;
               m_axis_pkt_tlast = 0;
               m_axis_pkt_tlast_reg_next = 0;
               m_axis_pkt_tvalid = 0;
@@ -626,13 +629,13 @@ module pifo_pkt_storage
       end
    end
 
-`ifdef COCOTB_SIM
-initial begin
-  $dumpfile ("pifo_pkt_storage_waveform.vcd");
-  $dumpvars (0,pifo_pkt_storage);
-  #1 $display("Sim running...");
-end
-`endif
+// `ifdef COCOTB_SIM
+// initial begin
+//   $dumpfile ("pifo_pkt_storage_waveform.vcd");
+//   $dumpvars (0,pifo_pkt_storage);
+//   #1 $display("Sim running...");
+// end
+// `endif
    
 endmodule // pifo_pkt_storage
 

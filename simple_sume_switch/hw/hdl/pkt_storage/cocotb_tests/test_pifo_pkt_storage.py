@@ -131,7 +131,7 @@ def test_pifo_pkt_storage(dut):
         ptr_slave_thread = cocotb.fork(ptr_slave.read())
     
         # send the pkts in the HW sim
-        tuser = BinaryValue(bits=len(meta)*8, bigEndian=False)
+        tuser = BinaryValue(bits=len(m)*8, bigEndian=False)
         tuser.set_buff(str(m))
         yield pkt_master.write_pkts([p], [tuser])
     
