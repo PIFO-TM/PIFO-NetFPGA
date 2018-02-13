@@ -154,7 +154,7 @@ class SkipList(HW_sim_object):
             prev_t = t
             
             self.busy = 0
-            print ("sl init done @", self.env.now)
+#            print ("sl init done @", self.env.now)
 
     # Search for insertion point for new value
     def search (self):
@@ -277,7 +277,7 @@ class SkipList(HW_sim_object):
                     self.busy = 0
                     
             except simpy.Interrupt as i:
-                print ("enq_sl stopped")
+#                print ("enq_sl stopped")
                 break
 
 
@@ -371,7 +371,7 @@ class SkipList(HW_sim_object):
                     self.busy = 0
             
             except simpy.Interrupt as i:
-                print ("deq_sl stopped")
+#                print ("deq_sl stopped")
                 break
 
 

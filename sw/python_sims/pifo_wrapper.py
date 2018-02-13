@@ -1,16 +1,17 @@
 from __future__ import print_function
 import simpy
 import random
+import sys, os
 from statistics import mean
-from pifo_skip_list import SkipList
+from hwsim_utils import HW_sim_object
+from pifo_skip_list import SkipList as SkipList_prob
+from det_skip_list_simpy import SkipList as SkipList_det
 
-class SkipListWrapper(SkipList):
+class SkipListWrapper(HW_sim_object):
     
-    def __init__(self, env, enq_in_pipe, enq_out_pipe, deq_in_pipe, deq_out_pipe, num_sl, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency):
-        super(SkipListWrapper, self).__init__(env, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency)
-        self.env = env
+    def __init__(self, env, enq_in_pipe, enq_out_pipe, deq_in_pipe, deq_out_pipe, num_sl, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency, sl_impl):
+        HW_sim_object.__init__(self, env, period)
         self.num_sl = num_sl
-        self.period = period
         self.enq_in_pipe = enq_in_pipe
         self.enq_out_pipe = enq_out_pipe
         self.deq_in_pipe = deq_in_pipe
@@ -20,7 +21,14 @@ class SkipListWrapper(SkipList):
         self.num_entries = 0
         
         for i in range(num_sl):
-            self.sl.append(SkipList(env, self.period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency))
+            if sl_impl == 'prob':
+                sl = SkipList_prob(env, self.period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency)
+            elif sl_impl == 'det':
+                sl = SkipList_det(env, self.period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency)
+            else:
+                print >> sys.stderr, 'ERROR: unsupported skipList implementation type: {}'.format(sl_impl)
+                sys.exit(1)
+            self.sl.append(sl)
 
         # register processes for simulation
         self.run(env)
