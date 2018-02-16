@@ -72,7 +72,7 @@ class SkipList():
             # For every node in level 0...
             while n0.right != None:
                 # Print value in level i if it exists in level 0
-                if (n.value == n0.value and (i == 0 or n.down != None)):
+                if (n.value == n0.value and (i == 0 or n0.up != None)):
                     outStr += str(n.value) + "--"
                     n = n.right
                 else: # Otherwise, print dashes
@@ -83,7 +83,7 @@ class SkipList():
                     else:
                         outStr += "-----"
                 n0 = n0.right
-            # +inf
+            # -inf
             outStr += "-oo\n"
         return outStr
 
@@ -91,10 +91,10 @@ class SkipList():
     def search (self, value):
         level = self.currMaxLevel
         n = self.head[level]
-        l = n
         u = self.head[level + 1]
         # Loop until bottom level
         while level >= 0:
+            print "level:", level
             cons_nodes = 0
             d = n
             # While traversing this level searcing for consecutive nodes...
@@ -110,17 +110,15 @@ class SkipList():
                     break;
                 # Check if consecutive nodes need to be adjusted
                 cons_nodes += 1
+                print "cons_modes:", cons_nodes
                 # If max number of consecutive nodes found
                 if cons_nodes == MAX_CONS_NODES:
                     # Insert new node one level above
                     # Get new node
                     m = self.fl.get()
                     # Connect new node to neighbors on same level
-                    m.value = l.value
-                    m.level = level + 1
-                    m.right = u.right
-                    m.left = u
-                    m.down = l
+                    m.value, m.level, m.right, m.left, m.down= l.value, level + 1, u.right, u, l
+                    print "adding node: val:", l.value, "level:", level+1
                     # Connect right and left neighbor to new node
                     u.right.left = m
                     u.right = m
@@ -132,14 +130,10 @@ class SkipList():
                     self.nodeCount += 1
                     break
                 
-            # Stop if bottom reached
-            if level == 0:
-                break
-            else:
-                # Otherwise, drop one level
-                u = d
-                n = d.down
-                level -= 1
+            # Otherwise, drop one level
+            u = d
+            n = d.down
+            level -= 1
 
         return (d)
 

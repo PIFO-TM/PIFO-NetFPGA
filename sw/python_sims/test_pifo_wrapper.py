@@ -5,13 +5,13 @@ from statistics import mean
 from pifo_wrapper import SkipListWrapper
 
 def test(env):
-    NUM_SKIP_LISTS = 2
+    NUM_SKIP_LISTS = 6
     PERIOD = 1
     MAX_NODES = 512
     OUTREG_WIDTH = 16
     ENQ_FIFO_DEPTH = 16
     CLK_FREQ = 200 # MHz
-    PKT_RATE = 14.8 # MPkts/sec
+    PKT_RATE = 14.8*4 # MPkts/sec
     PKT_INTERVAL = int(CLK_FREQ/PKT_RATE)
     NumRuns = 1
     NumOps = 128

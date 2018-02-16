@@ -91,7 +91,7 @@ class SkipList(HW_sim_object):
         # Loop through all levels in descending order
         for i in range(self.currMaxLevel, -1, -1):
             val0, hsp0, mdp0, lvl0, r0, l0, u0, d0 = self.nodes.mem[h0]
-            # -inf
+            # +inf
             outStr += "+oo --"
             # For every node in level 0...
             while r0 != t0:
@@ -114,7 +114,7 @@ class SkipList(HW_sim_object):
                         j += 1
                 if i == j:
                     outStr += str(val0) + "--"
-            # +inf
+            # -inf
             outStr += " -oo\n"
         return outStr
             
@@ -164,74 +164,75 @@ class SkipList(HW_sim_object):
             t1 = self.env.now
             level = self.currMaxLevel
             n = self.head[level]
-            l = n
             u = self.head[level + 1]
             # Loop until bottom level
             while level >= 0:
+                print ("level:", level)
                 cons_nodes = 0
                 # Read node n
                 self.nodes_r_in_pipe.put(n)
                 nVal, nHsp, nMdp, nLvl, nR, nL, nU, nD = yield self.nodes_r_out_pipe.get()
                 d, dVal, dHsp, dMdp, dLvl, dR, dL, dU, dD = n, nVal, nHsp, nMdp, nLvl, nR, nL, nU, nD
                 # While traversing this level searcing for consecutive nodes...
-                while True:
-                    if nR != -1:
-                        # Store current node in l
-                        l, lVal, lHsp, lMdp, lLvl, lR, lL, lU, lD = n, nVal, nHsp, nMdp, nLvl, nR, nL, nU, nD
-                        # Move right
-                        n = nR
-                        self.nodes_r_in_pipe.put(n)
-                        nVal, nHsp, nMdp, nLvl, nR, nL, nU, nD = yield self.nodes_r_out_pipe.get()
-                        # Save the node at which we will drop down
-                        if nVal > value:
-                            d, dVal, dHsp, dMdp, dLvl, dR, dL, dU, dD = n, nVal, nHsp, nMdp, nLvl, nR, nL, nU, nD
-                        # Exit if reached a higher node stack
-                        if nU != -1:
-                            break;
-                        # Check if consecutive nodes need to be adjusted
-                        cons_nodes += 1
-                        print ("cons_modes:", cons_nodes)
-                        # If max number of consecutive nodes found
-                        if cons_nodes == MAX_CONS_NODES:
-                            # Insert new node one level above
-                            # Read node in level above
-                            self.nodes_r_in_pipe.put(u)
-                            uVal, uHsp, uMdp, uLvl, uR, uL, uU, uD = yield self.nodes_r_out_pipe.get()
-                            # Get new node
-                            m = self.free_node_list.pop()
-                            # Connect new node
-                            self.nodes_w_in_pipe.put((m, [lVal, lHsp, lMdp, level+1, uR, u, -1, l]))
-                            yield self.nodes_w_out_pipe.get()
-                            print ("adding node: val:", lVal, "level:", level+1)
-                            # Connect right neighbor to new node
-                            # Read right neighbor of upper node
-                            self.nodes_r_in_pipe.put(uR)
-                            uRVal, uRHsp, uRMdp, uRLvl, uRR, uRL, uRU, uRD = yield self.nodes_r_out_pipe.get()
-                            # Write back
-                            self.nodes_w_in_pipe.put((uR, [uRVal, uRHsp, uRMdp, uRLvl, uRR, m, uRU, uRD]))
-                            yield self.nodes_w_out_pipe.get()
+                while nR != -1:
+                    # Store current node in l
+                    l, lVal, lHsp, lMdp, lLvl, lR, lL, lU, lD = n, nVal, nHsp, nMdp, nLvl, nR, nL, nU, nD
+                    print ("curr node: @", n, "val:", nVal, "level", nLvl)
+                    # Move right
+                    n = nR
+                    self.nodes_r_in_pipe.put(n)
+                    nVal, nHsp, nMdp, nLvl, nR, nL, nU, nD = yield self.nodes_r_out_pipe.get()
+                    # Save the node at which we will drop down
+                    if nVal > value:
+                        d, dVal, dHsp, dMdp, dLvl, dR, dL, dU, dD = n, nVal, nHsp, nMdp, nLvl, nR, nL, nU, nD
+                    # Exit if reached a higher node stack
+                    if nU != -1:
+                        break;
+                    # Count consecutive nodes except for head
+                    cons_nodes += 1
+                    print ("cons_nodes:", cons_nodes)
+                    # If max number of consecutive nodes found
+                    if cons_nodes == MAX_CONS_NODES:
+                        # Insert new node one level above
+                        # Read node in level above
+                        self.nodes_r_in_pipe.put(u)
+                        uVal, uHsp, uMdp, uLvl, uR, uL, uU, uD = yield self.nodes_r_out_pipe.get()
+                        print ("read u: @", u, "val:", uVal)
+                        # Get new node
+                        m = self.free_node_list.pop()
+                        # Connect new node
+                        self.nodes_w_in_pipe.put((m, [lVal, lHsp, lMdp, level+1, uR, u, -1, l]))
+                        yield self.nodes_w_out_pipe.get()
+                        print ("adding node: @", m, "val:", lVal, "level:", level+1, "r:", uR, "l:", u, "u:", -1, "d:", l)
+                        # Connect right neighbor to new node
+                        # Read right neighbor of upper node
+                        self.nodes_r_in_pipe.put(uR)
+                        uRVal, uRHsp, uRMdp, uRLvl, uRR, uRL, uRU, uRD = yield self.nodes_r_out_pipe.get()
+                        print ("read uR: @", uR, "val:", uRVal)
+                        # Write back
+                        self.nodes_w_in_pipe.put((uR, [uRVal, uRHsp, uRMdp, uRLvl, uRR, m, uRU, uRD]))
+                        yield self.nodes_w_out_pipe.get()
+                        print ("write uR: @", uR, "val:", uRVal, "l:", m)
 
-                            # Connect left neighbor to new node
-                            self.nodes_w_in_pipe.put((u, [uVal, uHsp, uMdp, uLvl, m, uL, uU, uD]))
-                            yield self.nodes_w_out_pipe.get()
+                        # Connect left neighbor to new node
+                        self.nodes_w_in_pipe.put((u, [uVal, uHsp, uMdp, uLvl, m, uL, uU, uD]))
+                        yield self.nodes_w_out_pipe.get()
+                        print ("write u: @", u, "val:", uVal, "r:", m)
 
-                            # Connect node below to new node
-                            self.nodes_w_in_pipe.put((l, [lVal, lHsp, lMdp, lLvl, lR, lL, m, lD]))
-                            yield self.nodes_w_out_pipe.get()
+                        # Connect node below to new node
+                        self.nodes_w_in_pipe.put((l, [lVal, lHsp, lMdp, lLvl, lR, lL, m, lD]))
+                        yield self.nodes_w_out_pipe.get()
+                        print ("write l: @", l, "val:", lVal, "u:", m)
 
-                            # Increment current level if we added a new level
-                            if level + 1 > self.currMaxLevel:
-                                self.currMaxLevel += 1
+                        # Increment current level if we added a new level
+                        if level + 1 > self.currMaxLevel:
+                            self.currMaxLevel += 1
+                            print ("incr currMaxLev:", self.currMaxLevel)
                             break
-                
-                # Stop if bottom reached
-                if level == 0:
-                    break
-                else:
-                    # Otherwise, drop one level
-                    u = d
-                    n = dD
-                    level -= 1
+            
+                u = d
+                n = dD
+                level -= 1
             # Output result
             nclks = self.env.now - t1
             self.search_out_pipe.put(((d, dVal, dHsp, dMdp, dLvl, dR, dL, dU, dD), nclks))

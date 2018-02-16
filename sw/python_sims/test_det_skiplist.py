@@ -39,9 +39,11 @@ def test(env):
             enq_nclks = env.now - t1
             enq_nclks_list.append(enq_nclks)
             print ('enq: {} - {} clks'.format(val, enq_nclks))
+            while sl.outreg.busy == 1:
+                yield env.timeout(PERIOD)
             print (sl.outreg.val)
-            yield env.timeout(13*PERIOD)
-            while sl.busy == 1:
+            yield env.timeout(130*PERIOD)
+            while sl.busy == 1 or sl.outreg.busy == 1:
                 yield env.timeout(PERIOD)
             print (sl)
         tot_search_nclks_list.extend(sl.bg_search_nclks_list)
