@@ -7,7 +7,7 @@ import random
 from cocotb.clock import Clock
 from cocotb.triggers import Timer, ReadOnly, RisingEdge, ClockCycles
 from cocotb.binary import BinaryValue
-from cocotb.axi4stream import AXI4StreamMaster, AXI4StreamSlave
+from cocotb.axi4stream import AXI4StreamMaster, AXI4StreamSlave, AXI4StreamStats
 from cocotb.result import TestFailure
 
 from metadata import Metadata
@@ -15,7 +15,9 @@ from scapy.all import Ether, IP, UDP, hexdump
 
 # Add include directory for python sims
 import sys, os
+import json
 
+RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000
 
 DEBUG = True
@@ -40,11 +42,12 @@ def test_tm_top(dut):
     # build the list of pkts and metadata to insert
     pkts_meta_in = [] 
     for i in range(10):
-        pkt_len = random.randint(50, 1000)
+#        pkt_len = random.randint(50, 1000)
         # build a packet
         pkt = Ether(dst='aa:aa:aa:aa:aa:aa', src='bb:bb:bb:bb:bb:bb')
+        pkt = pkt / ('\x11'*18 + '\x22'*32)
 #        pkt = pkt / ('\x11'*18 + '\x22'*32 + '\x33'*32 + '\x44'*32 + '\x55'*16)
-        pkt = pkt / ('\x11'*(pkt_len - 14))
+#        pkt = pkt / ('\x11'*(pkt_len - 14))
 
         rank = random.randint(0, 100)
     
@@ -61,6 +64,8 @@ def test_tm_top(dut):
 
     # Attach an AXI4Stream Master to the input pkt interface
     pkt_master = AXI4StreamMaster(dut, 's_axis', dut.axis_aclk)
+    pkt_in_stats = AXI4StreamStats(dut, 's_axis', dut.axis_aclk)
+    pkt_in_stats_thread = cocotb.fork(pkt_in_stats.record_n_delays(len(pkts_in)))
 
     # Send pkts and metadata in the HW sim
     yield pkt_master.write_pkts(pkts_in, meta_in)
@@ -70,9 +75,15 @@ def test_tm_top(dut):
 
     # Attach and AXI4StreamSlave to the output pkt interface
     pkt_slave = AXI4StreamSlave(dut, 'm_axis', dut.axis_aclk)
+    pkt_out_stats = AXI4StreamStats(dut, 'm_axis', dut.axis_aclk)
+    pkt_out_stats_thread = cocotb.fork(pkt_out_stats.record_n_delays(len(pkts_in)))
 
     # Read pkts out
     yield pkt_slave.read_n_pkts(len(pkts_in))
+
+    # wait for stats threads to finish
+    yield pkt_in_stats_thread.join()
+    yield pkt_out_stats_thread.join()
 
     sorted_pkts_meta = sorted(pkts_meta_in, key=lambda x: x[0])
 
@@ -88,8 +99,16 @@ def test_tm_top(dut):
     print 'input ranks           = {}'.format(ranks_in)
     print 'expected output ranks = {}'.format(expected_ranks)
     print 'actual output ranks   = {}'.format(actual_ranks)
+    print ''
+    print 'pkt_in_delays = {}'.format(pkt_in_stats.delays)
+    print 'pkt_out_delays = {}'.format(pkt_out_stats.delays)
 
-    
+    results = {}
+    results['enq_delays'] = pkt_in_stats.delays
+    results['deq_delays'] = pkt_out_stats.delays
+    with open(RESULTS_FILE, 'w') as f:
+        json.dump(results, f)
+
     error = False
     for (exp_pkt, pkt, exp_meta, meta, i) in zip(expected_pkts, pkts_out, expected_meta, meta_out, range(len(expected_pkts))):
         if str(exp_pkt) != str(pkt):
@@ -106,6 +125,7 @@ def test_tm_top(dut):
     yield ClockCycles(dut.axis_aclk, 20)
 
     if error:
+        print 'ERROR: Test Failed'
         raise(TestFailure)
 
 
