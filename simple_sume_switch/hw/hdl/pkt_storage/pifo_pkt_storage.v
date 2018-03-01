@@ -1,7 +1,7 @@
 //-
 // Copyright (C) 2010, 2011 The Board of Trustees of The Leland Stanford
 //                          Junior University
-// Copyright (C) 2017 Stephen Ibanez
+// Copyright (C) 2018 Stephen Ibanez
 // All rights reserved.
 //
 // This software was developed by
@@ -62,7 +62,8 @@ module pifo_pkt_storage
     parameter C_S_AXIS_PTR_DATA_WIDTH  = 24,
 
     // Storage parameters
-    parameter SEG_SIZE = 512
+    parameter SEG_SIZE = 512,
+    parameter MAX_PKTS = 4096 // max # of 64B pkts 
 
 )
 (
@@ -128,17 +129,16 @@ module pifo_pkt_storage
    // NOTE: currently assumed to be 2
    localparam WORDS_PER_SEG = SEG_SIZE/C_S_AXIS_DATA_WIDTH;
 
-   // According to the Vivado block memory generator - 2 cycle read latency
    // NOTE: currently assumed to be 2
    localparam BRAM_READ_DLY = 2; 
 
-   localparam SEG_ADDR_WIDTH = 12;
-   localparam SEG_BRAM_DEPTH = 4096;
+   localparam SEG_ADDR_WIDTH = log2(MAX_PKTS);
+   localparam SEG_BRAM_DEPTH = MAX_PKTS;
 
    localparam TOTAL_SEG_SIZE = SEG_SIZE + SEG_ADDR_WIDTH + 2*(C_S_AXIS_DATA_WIDTH / 8);
 
-   localparam META_ADDR_WIDTH = 12;
-   localparam META_BRAM_DEPTH = 4096;
+   localparam META_ADDR_WIDTH = log2(MAX_PKTS);
+   localparam META_BRAM_DEPTH = MAX_PKTS;
 
    //---------------------- Wires and Regs ---------------------------- 
    
@@ -238,25 +238,29 @@ module pifo_pkt_storage
 
 
    /* Segments BRAM */
-   segment_bram seg_bram_inst (
+   simple_dp_bram #(.RAM_WIDTH(TOTAL_SEG_SIZE), .L2_RAM_DEPTH(SEG_ADDR_WIDTH))
+     seg_bram_inst (
        .clka          (axis_aclk),    // input wire clka
        .wea           (seg_bram_wr_we),      // input wire [0 : 0] wea
        .addra         (seg_bram_wr_addr),  // input wire [11 : 0] addra
        .dina          (seg_bram_din),    // input wire [587 : 0] dina
        .clkb          (axis_aclk),    // input wire clkb
        .enb           (seg_bram_rd_en), // input wire [0 : 0] enb
+       .rstb          (~axis_resetn),
        .addrb         (seg_bram_rd_addr),  // input wire [11 : 0] addrb
        .doutb         (seg_bram_dout)  // output wire [587 : 0] doutb
    );
 
    /* Metadata BRAM */
-   metadata_bram meta_bram_inst (
+   simple_dp_bram #(.RAM_WIDTH(C_S_AXIS_TUSER_WIDTH), .L2_RAM_DEPTH(META_ADDR_WIDTH))
+     meta_bram_inst (
        .clka          (axis_aclk),    // input wire clka
        .wea           (meta_bram_wr_we),      // input wire [0 : 0] wea
        .addra         (meta_bram_wr_addr),  // input wire [11 : 0] addra
        .dina          (meta_bram_din),    // input wire [127 : 0] dina
        .clkb          (axis_aclk),    // input wire clkb
        .enb           (meta_bram_rd_en), // input wire [0 : 0] enb
+       .rstb          (~axis_resetn),
        .addrb         (meta_bram_rd_addr),  // input wire [11 : 0] addrb
        .doutb         (meta_bram_dout)  // output wire [127 : 0] doutb
    );

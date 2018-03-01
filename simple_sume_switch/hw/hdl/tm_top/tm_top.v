@@ -59,8 +59,9 @@ module tm_top
     parameter RANK_POS             = 32,
 
     // max num pkts the pifo can store
-//    parameter PIFO_DEPTH           = 256
-    parameter PIFO_DEPTH           = 16
+    parameter PIFO_DEPTH           = 16,
+    // max # 64B pkts that can fit in storage
+    parameter STORAGE_MAX_PKTS     = 4096
 )
 (
     // Global Ports
@@ -102,11 +103,10 @@ module tm_top
    localparam FINISH_PKT           = 4;
    localparam IFSM_NUM_STATES      = 3;
 
-   localparam SEG_ADDR_WIDTH = 12;
-   localparam META_ADDR_WIDTH = 12;
+   localparam SEG_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
+   localparam META_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam PTRS_WIDTH = SEG_ADDR_WIDTH + META_ADDR_WIDTH;
 
-   localparam L2_MAX_SIZE = log2(PIFO_DEPTH);
    localparam RANK_WIDTH = 32;
 
    //---------------------- Wires and Regs ---------------------------- 
@@ -153,7 +153,8 @@ module tm_top
        .DST_PORT_POS             (DST_PORT_POS),
        .RANK_POS                 (RANK_POS),
        .C_M_AXIS_PTR_DATA_WIDTH  (PTRS_WIDTH),
-       .C_S_AXIS_PTR_DATA_WIDTH  (PTRS_WIDTH)
+       .C_S_AXIS_PTR_DATA_WIDTH  (PTRS_WIDTH),
+       .MAX_PKTS                 (STORAGE_MAX_PKTS)
    )
    pkt_storage
    (
