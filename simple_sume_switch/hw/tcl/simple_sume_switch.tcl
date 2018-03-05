@@ -74,10 +74,10 @@ set_property constrset constraints [get_runs impl_1]
 # Project 
 #####################################
 update_ip_catalog
-create_ip -name input_arbiter -vendor NetFPGA -library NetFPGA -module_name input_arbiter_ip
-set_property generate_synth_checkpoint false [get_files input_arbiter_ip.xci]
-reset_target all [get_ips input_arbiter_ip]
-generate_target all [get_ips input_arbiter_ip]
+create_ip -name input_arbiter_drr -vendor NetFPGA -library NetFPGA -module_name input_arbiter_drr_ip
+set_property generate_synth_checkpoint false [get_files input_arbiter_drr_ip.xci]
+reset_target all [get_ips input_arbiter_drr_ip]
+generate_target all [get_ips input_arbiter_drr_ip]
 
 create_ip -name sss_output_queues -vendor NetFPGA -library NetFPGA -module_name sss_output_queues_ip
 set_property generate_synth_checkpoint false [get_files sss_output_queues_ip.xci]
@@ -131,9 +131,20 @@ generate_target all [get_ips identifier_ip]
 
 
 
-read_verilog "./hdl/axi_clocking.v"
-read_verilog "./hdl/nf_datapath.v"
-read_verilog "./hdl/top.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/axi_clocking.v"
+read_verilog "$::env(SUME_FOLDER)/lib/hw/std/cores/fallthrough_small_fifo_v1_0_0/hdl/small_fifo.v"
+read_verilog "$::env(SUME_FOLDER)/lib/hw/std/cores/fallthrough_small_fifo_v1_0_0/hdl/fallthrough_small_fifo.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/simple_dp_bram/simple_dp_bram.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/free_list_fifo/free_list_fifo.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/pkt_storage/pifo_pkt_storage.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/pifo_reg/pifo_reg.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/tm_top/tm_top.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/nf_datapath.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/top.v"
+
+#read_verilog "./hdl/axi_clocking.v"
+#read_verilog "./hdl/nf_datapath.v"
+#read_verilog "./hdl/top.v"
 
 
 #Setting Synthesis options

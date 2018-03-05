@@ -71,11 +71,11 @@ set_property generate_synth_checkpoint false [get_files nf_sume_sdnet_ip.xci]
 reset_target all [get_ips nf_sume_sdnet_ip]
 generate_target all [get_ips nf_sume_sdnet_ip]
 
-create_ip -name input_arbiter -vendor NetFPGA -library NetFPGA -module_name input_arbiter_ip
-set_property -dict [list CONFIG.C_BASEADDR $INPUT_ARBITER_BASEADDR] [get_ips input_arbiter_ip]
-set_property generate_synth_checkpoint false [get_files input_arbiter_ip.xci]
-reset_target all [get_ips input_arbiter_ip]
-generate_target all [get_ips input_arbiter_ip]
+create_ip -name input_arbiter_drr -vendor NetFPGA -library NetFPGA -module_name input_arbiter_drr_ip
+set_property -dict [list CONFIG.C_BASEADDR $INPUT_ARBITER_BASEADDR] [get_ips input_arbiter_drr_ip]
+set_property generate_synth_checkpoint false [get_files input_arbiter_drr_ip.xci]
+reset_target all [get_ips input_arbiter_drr_ip]
+generate_target all [get_ips input_arbiter_drr_ip]
 
 create_ip -name sss_output_queues -vendor NetFPGA -library NetFPGA -module_name sss_output_queues_ip
 set_property -dict [list CONFIG.C_BASEADDR $OUTPUT_QUEUES_BASEADDR] [get_ips sss_output_queues_ip]
@@ -156,6 +156,13 @@ update_ip_catalog
 source $::env(NF_DESIGN_DIR)/hw/tcl/control_sub_sim.tcl
 
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/axi_clocking.v"
+read_verilog "$::env(SUME_FOLDER)/lib/hw/std/cores/fallthrough_small_fifo_v1_0_0/hdl/small_fifo.v"
+read_verilog "$::env(SUME_FOLDER)/lib/hw/std/cores/fallthrough_small_fifo_v1_0_0/hdl/fallthrough_small_fifo.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/simple_dp_bram/simple_dp_bram.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/free_list_fifo/free_list_fifo.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/pkt_storage/pifo_pkt_storage.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/pifo_reg/pifo_reg.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/tm_top/tm_top.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/nf_datapath.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/top_sim.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/top_tb.v"
@@ -322,5 +329,14 @@ add_wave $nf_sume_sdnet_ip/m_axis_tuser -radix hex
 add_wave $nf_sume_sdnet_ip/out_pkt_len
 add_wave $nf_sume_sdnet_ip/out_src_port
 add_wave $nf_sume_sdnet_ip/out_dst_port
+
+add_wave_divider {Pkt Storage}
+add_wave $nf_datapath/tm_inst/pkt_storage
+
+add_wave_divider {nf_sume_sdnet_ip}
+add_wave $nf_sume_sdnet_ip
+
+add_wave_divider {tm_top}
+add_wave $nf_datapath/tm_inst
 
 run 65us

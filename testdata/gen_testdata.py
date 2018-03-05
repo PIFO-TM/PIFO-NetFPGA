@@ -99,6 +99,9 @@ def write_pcap_files():
 # generate testdata #
 #####################
 
+pkt = pad_pkt(Ether(dst='08:11:11:11:11:08', src='08:22:22:22:22:08'), 64)
+applyPkt(pkt, 'nf1', 0)
+expPkt(pkt, 'nf0')
 
 write_pcap_files()
 

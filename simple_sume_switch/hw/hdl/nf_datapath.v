@@ -187,11 +187,13 @@ module nf_datapath #(
 
     );
     
+    localparam C_AXIS_TUSER_DIGEST_WIDTH = 304;
+
     //internal connectivity
-  
+ 
     (* mark_debug = "true" *) wire [C_M_AXIS_DATA_WIDTH - 1:0]         m_axis_opl_tdata;
     (* mark_debug = "true" *) wire [((C_M_AXIS_DATA_WIDTH / 8)) - 1:0] m_axis_opl_tkeep;
-    (* mark_debug = "true" *) wire [C_M_AXIS_TUSER_WIDTH-1:0]          m_axis_opl_tuser;
+    (* mark_debug = "true" *) wire [C_AXIS_TUSER_DIGEST_WIDTH-1:0]     m_axis_opl_tuser;
     (* mark_debug = "true" *) wire                                     m_axis_opl_tvalid;
     (* mark_debug = "true" *) wire                                     m_axis_opl_tready;
     (* mark_debug = "true" *) wire                                     m_axis_opl_tlast;
@@ -211,8 +213,8 @@ module nf_datapath #(
     (* mark_debug = "true" *) wire [Q_SIZE_WIDTH-1:0]    dma_q_size; 
  
   //Input Arbiter
-  input_arbiter_ip 
- input_arbiter_v1_0 (
+  input_arbiter_drr_ip 
+ input_arbiter_drr_v1_0 (
       .axis_aclk(axis_aclk), 
       .axis_resetn(axis_resetn), 
       .m_axis_tdata (s_axis_opl_tdata), 
@@ -316,8 +318,8 @@ module nf_datapath #(
     );
 
        
-    (* mark_debug = "true" *) wire [C_S_AXI_DATA_WIDTH-1:0] bytes_dropped;
-    (* mark_debug = "true" *) wire [5-1:0] pkt_dropped; 
+    wire [C_S_AXI_DATA_WIDTH-1:0] bytes_dropped;
+    wire [5-1:0] pkt_dropped; 
 
 //    assign nf0_q_size = 'd12;
 //    assign nf1_q_size = 'd13;

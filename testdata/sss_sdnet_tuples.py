@@ -45,20 +45,14 @@ tuple_expect_file = "Tuple_expect.txt"
 
 # Diget Data MUST be 80 bits
 """ Digest Data:
-   src_port       (8 bits)
-   eth_src_addr   (48 bits)
-   unused         (24 bits)
+   unused         (256 bits)
 """
 
 dig_field_len = collections.OrderedDict()
-dig_field_len['src_port'] = 8
-dig_field_len['eth_src_addr'] = 48
-dig_field_len['unused'] = 24
+dig_field_len['unused'] = 256
 
 #initialize tuple_expect
 dig_tuple_expect = collections.OrderedDict()
-dig_tuple_expect['src_port'] = 0
-dig_tuple_expect['eth_src_addr'] = 0
 dig_tuple_expect['unused'] = 0
 
 """

@@ -37,9 +37,6 @@
  */
 
 typedef bit<48> EthAddr_t; 
-typedef bit<32> IPv4Addr_t;
-
-#define IPV4_TYPE 0x0800
 
 // standard Ethernet header
 header Ethernet_h { 
@@ -48,27 +45,9 @@ header Ethernet_h {
     bit<16> etherType;
 }
 
-// IPv4 header without options
-header IPv4_h {
-    bit<4> version;
-    bit<4> ihl;
-    bit<8> tos; 
-    bit<16> totalLen; 
-    bit<16> identification; 
-    bit<3> flags;
-    bit<13> fragOffset; 
-    bit<8> ttl;
-    bit<8> protocol; 
-    bit<16> hdrChecksum; 
-    IPv4Addr_t srcAddr; 
-    IPv4Addr_t dstAddr;
-}
-
-
 // List of all recognized headers
 struct Parsed_packet { 
     Ethernet_h ethernet; 
-    IPv4_h ip;
 }
 
 // user defined metadata: can be used to shared information between
@@ -77,9 +56,9 @@ struct user_metadata_t {
     bit<8>  unused;
 }
 
-// digest data to be sent to CPU if desired. MUST be 80 bits!
+// digest data to be sent to CPU if desired. MUST be 256 bits!
 struct digest_data_t {
-    bit<80>  unused;
+    bit<256>  unused;
 }
 
 // Parser Implementation
@@ -93,16 +72,9 @@ parser TopParser(packet_in b,
         b.extract(p.ethernet);
         user_metadata.unused = 0;
         digest_data.unused = 0;
-        transition select(p.ethernet.etherType) {
-            IPV4_TYPE: parse_ipv4;
-            default: reject;
-        } 
+        transition accept;
     }
 
-    state parse_ipv4 { 
-        b.extract(p.ip);
-        transition accept; 
-    }
 }
 
 // match-action pipeline
@@ -111,10 +83,24 @@ control TopPipe(inout Parsed_packet p,
                 inout digest_data_t digest_data, 
                 inout sume_metadata_t sume_metadata) {
 
+    action set_output_port(port_t port) {
+        sume_metadata.dst_port = port;
+    }
+
+    table forward {
+        key = { p.ethernet.dstAddr: exact; }
+
+        actions = {
+            set_output_port;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
 
 
     apply {
-
+        forward.apply();
     }
 }
 
@@ -127,7 +113,6 @@ control TopDeparser(packet_out b,
                     inout sume_metadata_t sume_metadata) { 
     apply {
         b.emit(p.ethernet); 
-        b.emit(p.ip);
     }
 }
 
