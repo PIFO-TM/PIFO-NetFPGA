@@ -45,6 +45,10 @@
  *       This module accepts read requests from various output ports and serializes
  *       them for the pkt_storage block using simple round robin scheduling.
  *
+ *       Each output port can only have one outstanding request so a new request will
+ *       overwrite an existing request for that port.
+ *
+ *       sel_out_rd_en should only be asserted when sel_out_valid is asserted.
  */
 
 module req_arbiter
@@ -175,13 +179,13 @@ module req_arbiter
        end
    end
 
-`ifdef COCOTB_SIM
-initial begin
-  $dumpfile ("req_arbiter_waveform.vcd");
-  $dumpvars (0,req_arbiter);
-  #1 $display("Sim running...");
-end
-`endif
+//`ifdef COCOTB_SIM
+//initial begin
+//  $dumpfile ("req_arbiter_waveform.vcd");
+//  $dumpvars (0,req_arbiter);
+//  #1 $display("Sim running...");
+//end
+//`endif
    
 endmodule // req_arbiter
 
