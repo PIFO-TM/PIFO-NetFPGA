@@ -3,6 +3,8 @@ TOPLEVEL_LANG = verilog
 TOPLEVEL := port_tm
 #TOPLEVEL = req_arbiter
 
+#COMPILE_ARGS=-pfileline=1
+
 VIVADO_IP_DIR=$(NF_DESIGN_DIR)/hw/vivado_ip
 NETFPGA_HW_LIB=$(SUME_FOLDER)/lib/hw/std/cores
 

@@ -135,13 +135,13 @@ module port_tm
    //---------------------- Wires and Regs ---------------------------- 
    reg                     s_axis_ifsm_tvalid;
 
-   reg                     pifo_insert    [NUM_PORTS-1:0];
-   reg                     pifo_remove    [NUM_PORTS-1:0];
+   reg  [NUM_PORTS-1:0]    pifo_insert;
+   reg  [NUM_PORTS-1:0]    pifo_remove;
    reg  [RANK_WIDTH-1:0]   pifo_rank_in   [NUM_PORTS-1:0];
    reg  [PTRS_WIDTH-1:0]   pifo_meta_in   [NUM_PORTS-1:0];
    wire [RANK_WIDTH-1:0]   pifo_rank_out  [NUM_PORTS-1:0];
    wire [PTRS_WIDTH-1:0]   pifo_meta_out  [NUM_PORTS-1:0];
-   wire                    pifo_valid_out [NUM_PORTS-1:0];
+   wire [NUM_PORTS-1:0]    pifo_valid_out;
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
    reg  [RANK_WIDTH-1 : 0]              rank_in_r, rank_in_r_next;
@@ -313,9 +313,10 @@ module port_tm
                       // register the rank, and pointers returned from pkt_storage
                       rank_in_r_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
                       ptrs_in_r_next = storage_ptr_out_tdata;
-                      // check storage_ptr_out_tvalid is asserted
-                      if (~storage_ptr_out_tvalid)
-                          $display("ERROR: port_tm - ifsm_state = WRITE_STORAGE, storage_ptr_out_tvalid=0\n");
+//                      // check storage_ptr_out_tvalid is asserted
+//                      if (storage_ptr_out_tvalid == 0) begin
+//                          $display("ERROR: port_tm - ifsm_state = WRITE_STORAGE, storage_ptr_out_tvalid=0 for first word of pkt\n");
+//                      end
                       // register the dst_port (assuming no broadcasting)
                       dport_in_r_next = (8'b0000_0001 & dst_port) ? 0 :
                                         (8'b0000_0100 & dst_port) ? 1 :
@@ -386,9 +387,6 @@ module port_tm
    integer k;
    always @(*) begin
        storage_ptr_in_tlast = 1;
-       storage_ptr_in_tdata = 0;
-       storage_ptr_in_tvalid = 0;
-       arb_rd_en = 0;
 
        // default
        for (k=0; k<NUM_PORTS; k=k+1) begin
@@ -405,6 +403,12 @@ module port_tm
            arb_rd_en = 1;
            storage_ptr_in_tdata = pifo_meta_out[arb_queue];
            storage_ptr_in_tvalid = 1;
+       end
+       else begin
+           pifo_remove[arb_queue] = 0;
+           arb_rd_en = 0;
+           storage_ptr_in_tdata = 0;
+           storage_ptr_in_tvalid = 0;
        end
    end // always @ (*)
 

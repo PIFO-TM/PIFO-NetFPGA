@@ -64,6 +64,12 @@ def test_port_tm(dut):
     # Attach an AXI4Stream Master to the input pkt interface
     pkt_master = AXI4StreamMaster(dut, 's_axis', dut.axis_aclk)
 
+    # Attach ReqMaster to each input interface
+    nf0_req_master = ReqMaster(dut, 'nf0_sel', dut.axis_aclk)
+    nf1_req_master = ReqMaster(dut, 'nf1_sel', dut.axis_aclk)
+    nf2_req_master = ReqMaster(dut, 'nf2_sel', dut.axis_aclk)
+    nf3_req_master = ReqMaster(dut, 'nf3_sel', dut.axis_aclk)
+
     # Send pkts and metadata in the HW sim
     yield pkt_master.write_pkts(pkts_in, meta_in)
 
@@ -79,14 +85,7 @@ def test_port_tm(dut):
     # Create the requests
     requests = [1 for r in ranks_in]
 
-    # Attach ReqMaster to each input interface
-    nf0_req_master = ReqMaster(dut, 'nf0_sel', dut.axis_aclk)
-    nf1_req_master = ReqMaster(dut, 'nf1_sel', dut.axis_aclk)
-    nf2_req_master = ReqMaster(dut, 'nf2_sel', dut.axis_aclk)
-    nf3_req_master = ReqMaster(dut, 'nf3_sel', dut.axis_aclk)
-
-
-    # start submitting requests
+    # start submitting read requests
     delay = 20
     #nf0_req_thread = cocotb.fork(nf0_req_master.write_reqs(requests, delay))
     nf1_req_thread = cocotb.fork(nf1_req_master.write_reqs(requests, delay))
@@ -110,9 +109,6 @@ def test_port_tm(dut):
     print 'input ranks           = {}'.format(ranks_in)
     print 'expected output ranks = {}'.format(expected_ranks)
     print 'actual output ranks   = {}'.format(actual_ranks)
-    print ''
-    print 'pkt_in_delays = {}'.format(pkt_in_stats.delays)
-    print 'pkt_out_delays = {}'.format(pkt_out_stats.delays)
 
     error = False
     for (exp_pkt, pkt, exp_meta, meta, i) in zip(expected_pkts, pkts_out, expected_meta, meta_out, range(len(expected_pkts))):

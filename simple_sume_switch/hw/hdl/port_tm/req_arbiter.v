@@ -101,31 +101,31 @@ module req_arbiter
        sel_queue_in[3] = nf3_sel_queue; 
    end
 
-   integer i;
+   integer p, q;
    // register the incomming requests
    always @ (posedge axis_aclk) begin
        if (~axis_resetn) begin
-           for (i=0; i<NUM_PORTS; i=i+1) begin
-               sel_valid_in_r[i] <= 0;
-               sel_queue_in_r[i] <= 0;
+           for (p=0; p<NUM_PORTS; p=p+1) begin
+               sel_valid_in_r[p] <= 0;
+               sel_queue_in_r[p] <= 0;
            end
        end
        else begin
-           for (i=0; i<NUM_PORTS; i=i+1) begin
-               if (sel_valid_in[i]) begin
+           for (q=0; q<NUM_PORTS; q=q+1) begin
+               if (sel_valid_in[q]) begin
                    // new request arrived, overwrite existing one
-                   sel_valid_in_r[i] <= 1;
-                   sel_queue_in_r[i] <= sel_queue_in[i];
+                   sel_valid_in_r[q] <= 1;
+                   sel_queue_in_r[q] <= sel_queue_in[q];
                end
-               else if (req_in_rd_en[i]) begin
+               else if (req_in_rd_en[q]) begin
                    // read this request out so no longer valid
-                   sel_valid_in_r[i] <= 0;
-                   sel_queue_in_r[i] <= sel_queue_in_r[i];
+                   sel_valid_in_r[q] <= 0;
+                   sel_queue_in_r[q] <= sel_queue_in_r[q];
                end
                else begin
                    // no change
-                   sel_valid_in_r[i] <= sel_valid_in_r[i];
-                   sel_queue_in_r[i] <= sel_queue_in_r[i];
+                   sel_valid_in_r[q] <= sel_valid_in_r[q];
+                   sel_queue_in_r[q] <= sel_queue_in_r[q];
                end
            end
        end
