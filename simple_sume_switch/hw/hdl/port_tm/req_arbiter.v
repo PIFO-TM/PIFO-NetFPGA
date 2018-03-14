@@ -63,13 +63,9 @@ module req_arbiter
 
     // input requests
     input                                      nf0_sel_valid,
-    input  [L2_NUM_PORTS-1:0]                  nf0_sel_queue,
     input                                      nf1_sel_valid,
-    input  [L2_NUM_PORTS-1:0]                  nf1_sel_queue,
     input                                      nf2_sel_valid,
-    input  [L2_NUM_PORTS-1:0]                  nf2_sel_queue,
     input                                      nf3_sel_valid,
-    input  [L2_NUM_PORTS-1:0]                  nf3_sel_queue,
 
     input                                      sel_out_rd_en,
     output reg                                 sel_out_valid,
@@ -78,10 +74,8 @@ module req_arbiter
 
    //---------------------- Wires and Regs ---------------------------- 
    reg [NUM_PORTS-1:0]     sel_valid_in;
-   reg [L2_NUM_PORTS-1:0]  sel_queue_in [NUM_PORTS-1:0];
 
    reg [NUM_PORTS-1:0]     sel_valid_in_r;
-   reg [L2_NUM_PORTS-1:0]  sel_queue_in_r [NUM_PORTS-1:0];
   
    reg [L2_NUM_PORTS-1:0]  cur_port;
    reg [NUM_PORTS-1:0]     req_in_rd_en;
@@ -92,13 +86,9 @@ module req_arbiter
    //-------------------- Modules and Logic ---------------------------
    always @(*) begin
        sel_valid_in[0] = nf0_sel_valid;
-       sel_queue_in[0] = nf0_sel_queue;
        sel_valid_in[1] = nf1_sel_valid;
-       sel_queue_in[1] = nf1_sel_queue;
        sel_valid_in[2] = nf2_sel_valid;
-       sel_queue_in[2] = nf2_sel_queue;
        sel_valid_in[3] = nf3_sel_valid;
-       sel_queue_in[3] = nf3_sel_queue; 
    end
 
    integer p, q;
@@ -107,7 +97,6 @@ module req_arbiter
        if (~axis_resetn) begin
            for (p=0; p<NUM_PORTS; p=p+1) begin
                sel_valid_in_r[p] <= 0;
-               sel_queue_in_r[p] <= 0;
            end
        end
        else begin
@@ -115,17 +104,14 @@ module req_arbiter
                if (sel_valid_in[q]) begin
                    // new request arrived, overwrite existing one
                    sel_valid_in_r[q] <= 1;
-                   sel_queue_in_r[q] <= sel_queue_in[q];
                end
                else if (req_in_rd_en[q]) begin
                    // read this request out so no longer valid
                    sel_valid_in_r[q] <= 0;
-                   sel_queue_in_r[q] <= sel_queue_in_r[q];
                end
                else begin
                    // no change
                    sel_valid_in_r[q] <= sel_valid_in_r[q];
-                   sel_queue_in_r[q] <= sel_queue_in_r[q];
                end
            end
        end
@@ -159,7 +145,7 @@ module req_arbiter
                // the cur_port has valid data
                req_in_rd_en[cur_port] = 1;
                sel_out_valid_next = 1;
-               sel_out_queue_next = sel_queue_in_r[cur_port];
+               sel_out_queue_next = cur_port;
            end
            else if (sel_out_valid & sel_out_rd_en) begin
                // the cur_port does not have valid data and we are reading the output

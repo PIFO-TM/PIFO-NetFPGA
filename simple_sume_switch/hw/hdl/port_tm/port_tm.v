@@ -91,13 +91,9 @@ module port_tm
     input                                          s_axis_tlast,
 
     input                             nf0_sel_valid,
-    input  [L2_NUM_PORTS-1:0]         nf0_sel_queue,
     input                             nf1_sel_valid,
-    input  [L2_NUM_PORTS-1:0]         nf1_sel_queue,
     input                             nf2_sel_valid,
-    input  [L2_NUM_PORTS-1:0]         nf2_sel_queue,
     input                             nf3_sel_valid,
-    input  [L2_NUM_PORTS-1:0]         nf3_sel_queue,
 
     output reg                            nf0_pifo_valid,
     output reg [RANK_WIDTH-1:0]           nf0_pifo_rank, 
@@ -181,13 +177,9 @@ module port_tm
     
         // input requests
         .nf0_sel_valid             (nf0_sel_valid),
-        .nf0_sel_queue             (nf0_sel_queue),
         .nf1_sel_valid             (nf1_sel_valid),
-        .nf1_sel_queue             (nf1_sel_queue),
         .nf2_sel_valid             (nf2_sel_valid),
-        .nf2_sel_queue             (nf2_sel_queue),
         .nf3_sel_valid             (nf3_sel_valid),
-        .nf3_sel_queue             (nf3_sel_queue),
     
         // serialized outputs
         .sel_out_rd_en             (arb_rd_en),
@@ -396,8 +388,8 @@ module port_tm
        // Wait for the req_arbiter to produce valid data
        // And the pkt_storage to be ready to accept read requests
        // And we actually want to read the pkts out
-       if (arb_valid && storage_ptr_in_tready && m_axis_tready) begin
-//       if (arb_valid_out && storage_ptr_in_tready) begin
+//       if (arb_valid && storage_ptr_in_tready && m_axis_tready) begin
+       if (arb_valid && storage_ptr_in_tready) begin
            // read PIFO and submit read request to pkt_storage
            pifo_remove[arb_queue] = 1;
            arb_rd_en = 1;
@@ -412,13 +404,13 @@ module port_tm
        end
    end // always @ (*)
 
-`ifdef COCOTB_SIM
-initial begin
-  $dumpfile("port_tm_waveform.vcd");
-  $dumpvars(0,port_tm);
-  #1 $display("Sim running...");
-end
-`endif
+//`ifdef COCOTB_SIM
+//initial begin
+//  $dumpfile("port_tm_waveform.vcd");
+//  $dumpvars(0,port_tm);
+//  #1 $display("Sim running...");
+//end
+//`endif
    
 endmodule // port_tm
 
