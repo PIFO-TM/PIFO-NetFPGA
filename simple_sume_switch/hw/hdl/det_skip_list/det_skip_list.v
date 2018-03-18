@@ -553,8 +553,8 @@ module det_skip_list
 							end
 					        else
 							begin
-							    sl_rank_in <= pr_max_rank;
-								sl_meta_in <= pr_max_meta;
+							    sl_rank_in <= rank_in;
+								sl_meta_in <= meta_in;
 					            sl_insert <= 1'b1;
 							end
 							busy <= 1'b1;
