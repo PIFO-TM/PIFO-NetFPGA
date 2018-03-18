@@ -384,7 +384,7 @@ module traffic_manager
            selector_s_axis_tuser[m]  = 0;
            selector_s_axis_tvalid[m] = 0;
            selector_s_axis_tlast[m]  = 0;
-           port_tm_m_axis_tready[m] = 0;
+           port_tm_m_axis_tready[m] = 1; // 0;  //TODO: will setting this to 1 cause the first word of pkts to be dropped sometimes?
 
            dport_one_hot[m] = port_tm_m_axis_tuser[input_selection_r[m]][DST_PORT_POS+PORT_WIDTH-1 : DST_PORT_POS];
            dport[m] = (8'b0000_0001 & dport_one_hot[m]) ? 0 :

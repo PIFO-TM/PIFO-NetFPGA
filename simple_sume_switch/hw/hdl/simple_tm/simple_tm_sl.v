@@ -31,12 +31,12 @@
 //
 /*******************************************************************************
  *  File:
- *        tm_top.v
+ *        simple_tm_sl.v
  *
  *  Library:
  *
  *  Module:
- *        tm_top
+ *        simple_tm
  *
  *  Author:
  *        Stephen Ibanez
@@ -47,7 +47,7 @@
  *
  */
 
-module tm_top
+module simple_tm_sl
 #(
     // Pkt AXI Stream Data Width
     parameter C_M_AXIS_DATA_WIDTH  = 256,
@@ -60,6 +60,7 @@ module tm_top
 
     // max num pkts the pifo can store
     parameter PIFO_DEPTH           = 16,
+    parameter PIFO_REG_DEPTH       = 16,
     // max # 64B pkts that can fit in storage
     parameter STORAGE_MAX_PKTS     = 4096
 )
@@ -81,7 +82,7 @@ module tm_top
     input [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_tkeep,
     input [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_tuser,
     input                                          s_axis_tvalid,
-    output                                         s_axis_tready,
+    output reg                                     s_axis_tready,
     input                                          s_axis_tlast
 
 );
@@ -111,11 +112,7 @@ module tm_top
 
    //---------------------- Wires and Regs ---------------------------- 
 
-   reg [C_S_AXIS_DATA_WIDTH - 1:0]              s_axis_reg_tdata;
-   reg [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_reg_tkeep;
-   reg [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_reg_tuser;
-   reg                                          s_axis_reg_tvalid;
-   reg                                          s_axis_reg_tlast;
+   wire s_axis_tready_storage;
 
    reg                     pifo_insert;
    reg                     pifo_remove;
@@ -124,6 +121,7 @@ module tm_top
    wire [RANK_WIDTH-1:0]   pifo_rank_out;
    wire [PTRS_WIDTH-1:0]   pifo_meta_out;
    wire                    pifo_valid_out;
+   wire                    pifo_busy;
 
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
@@ -173,7 +171,7 @@ module tm_top
        .s_axis_pkt_tkeep  (s_axis_tkeep),
        .s_axis_pkt_tuser  (s_axis_tuser),
        .s_axis_pkt_tvalid (s_axis_tvalid),
-       .s_axis_pkt_tready (s_axis_tready),
+       .s_axis_pkt_tready (s_axis_tready_storage),
        .s_axis_pkt_tlast  (s_axis_tlast),
        // pkt_storage output pointers (write result output interface)
        .m_axis_ptr_tdata  (storage_ptr_out_tdata),
@@ -187,13 +185,15 @@ module tm_top
    );
 
     /* PIFO to store rank values and pointers */ 
-    pifo_reg
+    det_skip_list
     #(
      .L2_MAX_SIZE(log2(PIFO_DEPTH)),
      .RANK_WIDTH(RANK_WIDTH),
-     .META_WIDTH(PTRS_WIDTH)
+     .HSP_WIDTH(PTRS_WIDTH/2),
+     .MDP_WIDTH(PTRS_WIDTH/2),
+     .L2_REG_WIDTH(log2(PIFO_REG_DEPTH))
     )
-    pifo_reg_i
+    det_skip_list_i
     (
      .rst       (~axis_resetn),
      .clk       (axis_aclk),
@@ -203,7 +203,8 @@ module tm_top
      .meta_in   (pifo_meta_in),
      .rank_out  (pifo_rank_out),
      .meta_out  (pifo_meta_out),
-     .valid_out (pifo_valid_out)
+     .valid_out (pifo_valid_out),
+     .busy      (pifo_busy)
     );
 
 
@@ -216,6 +217,8 @@ module tm_top
       // default values
       ifsm_state_next   = ifsm_state;
 
+      s_axis_tready = 1;
+
       rank_in_next = rank_in;
       ptrs_in_next = ptrs_in;
 
@@ -227,14 +230,20 @@ module tm_top
           WRITE_STORAGE: begin
               // Wait until the first word of the pkt
               if (s_axis_tready && s_axis_tvalid) begin
-                  // register the rank, and pointers returned from pkt_storage
-                  rank_in_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
-                  ptrs_in_next = storage_ptr_out_tdata;
-                  // TODO: static simulation check that storage_ptr_out_tvalid == 1
-                  // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
+                  if (s_axis_tready_storage & ~pifo_busy) begin
+                      // register the rank, and pointers returned from pkt_storage
+                      rank_in_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
+                      ptrs_in_next = storage_ptr_out_tdata;
+                      // TODO: static simulation check that storage_ptr_out_tvalid == 1
+                      // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
-                  // transition to WRITE_PIFO state
-                  ifsm_state_next = WRITE_PIFO;
+                      // transition to WRITE_PIFO state
+                      ifsm_state_next = WRITE_PIFO;
+                  end
+                  else begin
+                      // drop the pkt
+                      ifsm_state_next = FINISH_PKT;
+                  end
               end
           end
 
@@ -291,6 +300,7 @@ module tm_top
        // Wait for the PIFO to produce valid data and the pkt_storage to be ready to accept read requests
        // And we actually want to read the pkts out
        if (pifo_valid_out && storage_ptr_in_tready && m_axis_tready) begin
+//       if (pifo_valid_out && storage_ptr_in_tready) begin
            // read PIFO and submit read request to pkt_storage
            pifo_remove = 1;
            storage_ptr_in_tdata = pifo_meta_out;
@@ -305,8 +315,8 @@ module tm_top
 
 `ifdef COCOTB_SIM
 initial begin
-  $dumpfile ("tm_top_waveform.vcd");
-  $dumpvars (0,tm_top);
+  $dumpfile ("simple_tm_sl_waveform.vcd");
+  $dumpvars (0,simple_tm_sl);
   #1 $display("Sim running...");
 end
 `endif

@@ -80,7 +80,7 @@ module port_selector
     input [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_tkeep,
     input [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_tuser,
     input                                          s_axis_tvalid,
-    output reg                                     s_axis_tready,
+    output                                         s_axis_tready,
     input                                          s_axis_tlast,
 
     output reg                                     nf0_sel_valid,
@@ -131,6 +131,13 @@ module port_selector
    localparam SEL_FSM_BITS = 2;
 
    //---------------------- Wires and Regs ---------------------------- 
+   wire [C_S_AXIS_DATA_WIDTH - 1:0]              s_axis_tdata_in;
+   wire [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_tkeep_in;
+   wire [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_tuser_in;
+   wire                                          s_axis_tvalid_in;
+   reg                                           s_axis_tready_in;
+   wire                                          s_axis_tlast_in;
+
    reg wr_en, rd_en;
    wire nearly_full_fifo, empty;
 
@@ -153,6 +160,34 @@ module port_selector
  
    //-------------------- Modules and Logic ---------------------------
 
+   // input pipeline stage
+   axi_stream_pipeline
+     #(
+        .C_M_AXIS_DATA_WIDTH  (C_M_AXIS_DATA_WIDTH),
+        .C_S_AXIS_DATA_WIDTH  (C_S_AXIS_DATA_WIDTH),
+        .C_M_AXIS_TUSER_WIDTH (C_M_AXIS_TUSER_WIDTH),
+        .C_S_AXIS_TUSER_WIDTH (C_S_AXIS_TUSER_WIDTH)
+      )
+   input_axi_pipe
+     (
+       .axis_aclk   (axis_aclk),
+       .axis_resetn (axis_resetn),
+
+       .m_axis_tdata  (s_axis_tdata_in),
+       .m_axis_tkeep  (s_axis_tkeep_in),
+       .m_axis_tuser  (s_axis_tuser_in),
+       .m_axis_tvalid (s_axis_tvalid_in),
+       .m_axis_tready (s_axis_tready_in),
+       .m_axis_tlast  (s_axis_tlast_in),
+
+       .s_axis_tdata  (s_axis_tdata),
+       .s_axis_tkeep  (s_axis_tkeep),
+       .s_axis_tuser  (s_axis_tuser),
+       .s_axis_tvalid (s_axis_tvalid),
+       .s_axis_tready (s_axis_tready),
+       .s_axis_tlast  (s_axis_tlast)
+     );
+
    fallthrough_small_fifo
      #( .WIDTH(C_M_AXIS_DATA_WIDTH+C_M_AXIS_DATA_WIDTH/8+1),
         .MAX_DEPTH_BITS(BUFFER_SIZE_BITS),
@@ -165,7 +200,7 @@ module port_selector
       .prog_full                      (nearly_full_fifo),
       .empty                          (empty),
       // Inputs
-      .din                            ({s_axis_tlast, s_axis_tkeep, s_axis_tdata}),
+      .din                            ({s_axis_tlast_in, s_axis_tkeep_in, s_axis_tdata_in}),
       .wr_en                          (wr_en),
       .rd_en                          (rd_en),
       .reset                          (~axis_resetn),
@@ -183,7 +218,7 @@ module port_selector
       .prog_full                      (),
       .empty                          (metadata_empty),
       // Inputs
-      .din                            (s_axis_tuser),
+      .din                            (s_axis_tuser_in),
       .wr_en                          (metadata_wr_en),
       .rd_en                          (metadata_rd_en),
       .reset                          (~axis_resetn),
@@ -195,13 +230,13 @@ module port_selector
     */
    always @(*) begin
        ifsm_state_next = ifsm_state;
-       s_axis_tready = ~nearly_full_fifo & ~metadata_nearly_full_fifo;
+       s_axis_tready_in = ~nearly_full_fifo & ~metadata_nearly_full_fifo;
        wr_en = 0;
        metadata_wr_en = 0;
 
        case(ifsm_state)
            IFSM_WAIT_START: begin
-               if (s_axis_tvalid & s_axis_tready) begin
+               if (s_axis_tvalid_in & s_axis_tready_in) begin
                    wr_en = 1;
                    metadata_wr_en = 1;
                    ifsm_state_next = IFSM_WAIT_END;
@@ -210,10 +245,10 @@ module port_selector
 
            IFSM_WAIT_END: begin
                // Finish writing the pkt into storage
-               s_axis_tready = 1;
-               if(s_axis_tvalid) begin
+               s_axis_tready_in = 1;
+               if(s_axis_tvalid_in) begin
                    wr_en = 1;
-                   if (s_axis_tlast) begin
+                   if (s_axis_tlast_in) begin
                        ifsm_state_next = IFSM_WAIT_START;
                    end
                end
@@ -362,7 +397,7 @@ module port_selector
 
            /* Wait for selected pkt to finish before submitting next request */
            WAIT_PKT_END: begin
-               if (s_axis_tvalid & s_axis_tready & s_axis_tlast)
+               if (s_axis_tvalid_in & s_axis_tready_in & s_axis_tlast_in)
                    sel_state_next = CHOOSE_PORT;
            end
        endcase

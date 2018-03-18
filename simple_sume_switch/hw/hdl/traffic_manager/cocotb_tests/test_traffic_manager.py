@@ -44,7 +44,7 @@ def test_traffic_manager(dut):
 
     # build the list of pkts and metadata to insert
     pkts_meta_in = [] 
-    for i in range(1):
+    for i in range(4):
 #        pkt_len = random.randint(50, 1000)
         # build a packet
         pkt = Ether(dst='aa:aa:aa:aa:aa:aa', src='bb:bb:bb:bb:bb:bb')
@@ -71,6 +71,7 @@ def test_traffic_manager(dut):
     # delay between writing pkts and reading them out
     yield ClockCycles(dut.axis_aclk, 10)
 
+    print "len(pkts_in) = {}".format(len(pkts_in))
     # Read pkts out
     yield nf1_slave.read_n_pkts(len(pkts_in))
 
@@ -80,8 +81,8 @@ def test_traffic_manager(dut):
     expected_pkts = [tup[1] for tup in sorted_pkts_meta]
     expected_meta = [tup[2] for tup in sorted_pkts_meta]
 
-    pkts_out = pkt_slave.pkts
-    meta_out = pkt_slave.metadata
+    pkts_out = nf1_slave.pkts
+    meta_out = nf1_slave.metadata
 
     actual_ranks = [Metadata(m.get_buff()).rank for m in meta_out]
 

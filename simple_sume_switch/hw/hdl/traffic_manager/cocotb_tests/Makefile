@@ -2,7 +2,7 @@
 TOPLEVEL_LANG = verilog
 TOPLEVEL := traffic_manager
 
-COMPILE_ARGS=-pfileline=1
+#COMPILE_ARGS=-pfileline=1
 
 VIVADO_IP_DIR=$(NF_DESIGN_DIR)/hw/vivado_ip
 NETFPGA_HW_LIB=$(SUME_FOLDER)/lib/hw/std/cores
@@ -18,6 +18,7 @@ VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pkt_storage/pifo_pkt_storage.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_reg/pifo_reg.v
 
 # port_tm source files
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/axi_stream_pipeline/axi_stream_pipeline.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/port_tm/req_arbiter.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/port_tm/port_tm.v
 
