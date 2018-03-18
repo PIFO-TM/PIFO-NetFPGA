@@ -18,7 +18,8 @@ module det_skip_list
 	output [RANK_WIDTH-1:0] rank_out,
 	output [HSP_WIDTH+MDP_WIDTH-1:0] meta_out,
 	output valid_out,
-    output reg busy
+    output reg busy,
+    output reg [L2_MAX_SIZE-1:0] num_entries
 );
 
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
@@ -99,7 +100,7 @@ module det_skip_list
 	reg [L2_NUM_LVLS-1:0] lvl_cntr;
 	reg [L2_MAX_SIZE-1:0] node_cntr;
 //	reg busy;
-	reg [L2_MAX_SIZE-1:0] num_entries;
+//	reg [L2_MAX_SIZE-1:0] num_entries;
 	reg [L2_MAX_SIZE-1:0] rank_raddr;
 	reg [L2_MAX_SIZE-1:0] rank_waddr;
 	reg [RANK_WIDTH-1:0] rank_din;
@@ -859,10 +860,10 @@ module det_skip_list
 			        rank_din <= search_rank;
 				    rank_wr <= 1'b1;
 					hsp_waddr <= new_node;
-					hsp_din <= meta_in[META_WIDTH-1:MDP_WIDTH];
+					hsp_din <= sl_meta_in[META_WIDTH-1:MDP_WIDTH];
 					hsp_wr <= 1'b1;
 					mdp_waddr <= new_node;
-					mdp_din <= meta_in[MDP_WIDTH-1:0];
+					mdp_din <= sl_meta_in[MDP_WIDTH-1:0];
 					mdp_wr <= 1'b1;					
                     lvl_waddr <= new_node;
 				    lvl_din <= 0;
