@@ -31,23 +31,23 @@
 //
 /*******************************************************************************
  *  File:
- *        simple_tm_sl_drop.v
+ *        simple_tm_sl_bp.v
  *
  *  Library:
  *
  *  Module:
- *        simple_tm
+ *        simple_tm_sl_bp
  *
  *  Author:
  *        Stephen Ibanez
  * 		
  *  Description:
  *        This is the top-level module that ties together the skiplist(s) and packet
- *        storage. It does not assert back pressure and instead drops the packet.
+ *        storage. This version asserts bacl pressure rather than drops packets
  *
  */
 
-module simple_tm_sl_drop
+module simple_tm_sl_bp
 #(
     // Pkt AXI Stream Data Width
     parameter C_M_AXIS_DATA_WIDTH  = 256,
@@ -102,8 +102,7 @@ module simple_tm_sl_drop
    localparam WRITE_STORAGE        = 1;
    localparam WRITE_PIFO           = 2;
    localparam FINISH_PKT           = 4;
-   localparam DROP_PKT             = 8;
-   localparam IFSM_NUM_STATES      = 4;
+   localparam IFSM_NUM_STATES      = 3;
 
    localparam SEG_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam META_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
@@ -220,44 +219,39 @@ module simple_tm_sl_drop
       ifsm_state_next   = ifsm_state;
 
 //      s_axis_tvalid_storage = 0;
-      s_axis_tready = 1;
+      s_axis_tready = s_axis_tready_storage;
 
       rank_in_next = rank_in;
       ptrs_in_next = ptrs_in;
 
       pifo_insert = 0;
       pifo_rank_in = 0;
-      pifo_meta_in = 0;      
+      pifo_meta_in = 0;
 
       case(ifsm_state)
           WRITE_STORAGE: begin
+              // don't assert tready until both storage and pifo are ready
+              s_axis_tready = s_axis_tready_storage & ~pifo_busy;
               // Wait until the first word of the pkt
               if (s_axis_tready && s_axis_tvalid) begin
-                  if (s_axis_tready_storage & ~pifo_busy) begin
-                      s_axis_tvalid_storage = 1;
-                      // register the rank, and pointers returned from pkt_storage
-                      rank_in_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
-                      ptrs_in_next = storage_ptr_out_tdata;
-                      // TODO: static simulation check that storage_ptr_out_tvalid == 1
-                      // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
+                  s_axis_tvalid_storage = 1;
+                  // register the rank, and pointers returned from pkt_storage
+                  rank_in_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
+                  ptrs_in_next = storage_ptr_out_tdata;
+                  // TODO: static simulation check that storage_ptr_out_tvalid == 1
+                  // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
-                      // transition to WRITE_PIFO state
-                      ifsm_state_next = WRITE_PIFO;
-                  end
-                  else begin
-                      // drop the pkt
-                      s_axis_tvalid_storage = 0;
-                      ifsm_state_next = DROP_PKT;
-                  end
+                  // transition to WRITE_PIFO state
+                  ifsm_state_next = WRITE_PIFO;
               end
               else begin
-                      s_axis_tvalid_storage = 0;
+                  s_axis_tvalid_storage = 0;
               end
           end
 
           WRITE_PIFO: begin
               s_axis_tvalid_storage = s_axis_tvalid;
-              // Will always be in this state for the second word of the pkt (that is not dropped)
+              // Will always be in this state for the second word of the pkt
               // Insert rank and ptrs into PIFO
               pifo_insert = 1;
               pifo_rank_in = rank_in;
@@ -274,8 +268,8 @@ module simple_tm_sl_drop
           end
 
           FINISH_PKT: begin
-              // Wait until the end of the pkt before going back to WRITE_STORAGE state
               s_axis_tvalid_storage = s_axis_tvalid;
+              // Wait until the end of the pkt before going back to WRITE_STORAGE state
               if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
                   ifsm_state_next = WRITE_STORAGE;
               end
@@ -283,18 +277,6 @@ module simple_tm_sl_drop
                   ifsm_state_next = FINISH_PKT;
               end
           end
-
-          DROP_PKT: begin
-              s_axis_tvalid_storage = 0;
-              // Wait until the end of the pkt before going back to WRITE_STORAGE state
-              if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
-                  ifsm_state_next = WRITE_STORAGE;
-              end
-              else begin
-                  ifsm_state_next = DROP_PKT;
-              end
-          end
-
       endcase // case(ifsm_state)
    end // always @ (*)
 
@@ -337,8 +319,8 @@ module simple_tm_sl_drop
 
 `ifdef COCOTB_SIM
 initial begin
-  $dumpfile ("simple_tm_sl_drop_waveform.vcd");
-  $dumpvars (0,simple_tm_sl_drop);
+  $dumpfile ("simple_tm_sl_bp_waveform.vcd");
+  $dumpvars (0,simple_tm_sl_bp);
   #1 $display("Sim running...");
 end
 `endif

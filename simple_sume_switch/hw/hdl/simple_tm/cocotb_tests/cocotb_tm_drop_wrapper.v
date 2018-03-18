@@ -31,12 +31,12 @@
 //
 /*******************************************************************************
  *  File:
- *        cocotb_tm_wrapper.v
+ *        cocotb_tm_drop_wrapper.v
  *
  *  Library:
  *
  *  Module:
- *        cocotb_tm_wrapper
+ *        cocotb_tm_drop_wrapper
  *
  *  Author:
  *        Stephen Ibanez
@@ -47,7 +47,7 @@
  *
  */
 
-module cocotb_tm_bp_wrapper
+module cocotb_tm_drop_wrapper
 #(
     // Pkt AXI Stream Data Width
     parameter C_M_AXIS_DATA_WIDTH  = 256,
@@ -83,7 +83,7 @@ module cocotb_tm_bp_wrapper
 
 );
 
-   simple_tm_sl_bp
+   simple_tm_sl_drop
    #(
        .PIFO_DEPTH       (PIFO_DEPTH),
        .PIFO_REG_DEPTH   (PIFO_REG_DEPTH),
