@@ -62,7 +62,8 @@ module simple_tm_sl_bp
     parameter PIFO_DEPTH           = 16,
     parameter PIFO_REG_DEPTH       = 16,
     // max # 64B pkts that can fit in storage
-    parameter STORAGE_MAX_PKTS     = 4096
+    parameter STORAGE_MAX_PKTS     = 4096,
+    parameter NUM_SKIP_LISTS       = 1
 )
 (
     // Global Ports
@@ -186,15 +187,16 @@ module simple_tm_sl_bp
    );
 
     /* PIFO to store rank values and pointers */ 
-    det_skip_list
+//    det_skip_list
+    pifo_top
     #(
      .L2_MAX_SIZE(log2(PIFO_DEPTH)),
      .RANK_WIDTH(RANK_WIDTH),
-     .HSP_WIDTH(PTRS_WIDTH/2),
-     .MDP_WIDTH(PTRS_WIDTH/2),
-     .L2_REG_WIDTH(log2(PIFO_REG_DEPTH))
+     .META_WIDTH(PTRS_WIDTH),
+     .L2_REG_WIDTH(log2(PIFO_REG_DEPTH)),
+     .NUM_SKIP_LISTS(NUM_SKIP_LISTS)
     )
-    det_skip_list_i
+    pifo_inst
     (
      .rst       (~axis_resetn),
      .clk       (axis_aclk),

@@ -4,8 +4,9 @@ module det_skip_list
 #(
 	parameter L2_MAX_SIZE = 5,
 	parameter RANK_WIDTH = 10,
-	parameter HSP_WIDTH = 10,
-	parameter MDP_WIDTH = 10,
+	parameter META_WIDTH = 20,
+	parameter HSP_WIDTH = META_WIDTH/2,
+	parameter MDP_WIDTH = META_WIDTH/2,
     parameter L2_REG_WIDTH = 2
 )
 (
@@ -27,7 +28,7 @@ module det_skip_list
     localparam L2_NUM_LVLS = 2;
 	localparam NUM_LVLS = 2**L2_NUM_LVLS;
     localparam MAX_CONS_NODES = 3;
-	localparam META_WIDTH = HSP_WIDTH + MDP_WIDTH;
+//	localparam META_WIDTH = HSP_WIDTH + MDP_WIDTH;
 	
 	// Main state
     localparam INIT_HEAD      = 3'b000, 

@@ -10,15 +10,17 @@ module pifo_reg
     input rst,
     input clk,
     input insert,
-    input remove,
 	input [RANK_WIDTH-1:0] rank_in,
 	input [META_WIDTH-1:0] meta_in,
-	output reg [RANK_WIDTH-1:0] ins_rank_out,
-	output reg [META_WIDTH-1:0] ins_meta_out,
-	output reg ins_valid_out,
+    input remove,
 	output [RANK_WIDTH-1:0] rank_out,
 	output [META_WIDTH-1:0] meta_out,
-	output reg valid_out
+	output reg valid_out,
+	output [RANK_WIDTH-1:0] max_rank_out,
+	output [META_WIDTH-1:0] max_meta_out,
+	output reg max_valid_out,
+	output reg empty,
+	output reg full
 );
 
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
@@ -92,8 +94,15 @@ module pifo_reg
 				    mvalid[i+1][j/2] <= 1'b0;
 			end
 	end
+
+	// Output min and max
+	assign rank_out = min_rank[COMP_LVLS-1][0];
+	assign meta_out = min_meta[COMP_LVLS-1][0];
+	assign idx = min_idx[COMP_LVLS-1][0];
+	assign max_rank_out = max_rank[COMP_LVLS-1][0];
+	assign max_meta_out = max_meta[COMP_LVLS-1][0];
 	
-	// Find min/max
+	// Min/max valig generation
     always @(posedge clk)
 	begin
 	    if (rst)
@@ -101,18 +110,19 @@ module pifo_reg
 		else
 		begin
 		    if (insert == 1'b1 || remove == 1'b1)
+			begin
 			    valid_out <= 1'b0;
+				max_valid_out <= 1'b0;
+			end
 
 		    if (calc_min_max == 1'b1)
 				if (num_entries > 0)
+				begin
 			        valid_out <= 1'b1;
+					max_valid_out <= 1'b1;
+				end
 	    end
 	end
-
-	// Output min or max depending on ORDER param
-	assign rank_out = min_rank[COMP_LVLS-1][0];
-	assign meta_out = min_meta[COMP_LVLS-1][0];
-	assign idx = min_idx[COMP_LVLS-1][0];
 		
     // Insert/Remove
     always @(posedge clk)
@@ -122,12 +132,11 @@ module pifo_reg
 		    num_entries <= 0;
 			calc_min_max <= 0;
 			insert_ltch <= 0;
-			ins_valid_out <= 0;
+			full <= 1'b0;
 		end
 		else 
 		begin
 		    calc_min_max <= 0;
-			ins_valid_out <= 0;
 			
 		    if (remove == 1'b1 && num_entries > 0)
 		    begin
@@ -140,6 +149,9 @@ module pifo_reg
 						valid[i-1] <= valid[i];
 					end
 				valid[num_entries-1] <= 0;
+				if (num_entries == 1)
+				    empty <= 1'b1;
+				full <= 1'b0;
 				num_entries <= num_entries - 1;
 			    calc_min_max <= 1;
 				insert_ltch <= insert;
@@ -152,9 +164,10 @@ module pifo_reg
 		            rank[num_entries] <= rank_in;
 			        meta[num_entries] <= meta_in;
 				    valid[num_entries] <= 1;
-	                ins_rank_out <= 0;
-	                ins_meta_out <= -1;
-					ins_valid_out <= 1'b1;
+					if (num_entries == MAX_SIZE-1)
+					    full <= 1'b1;
+					else
+					    full <= 1'b0;
 			        num_entries <= num_entries + 1;
 				end
 				else
@@ -162,20 +175,13 @@ module pifo_reg
 				    // If new value is smaller than max
                     if (rank_in < max_rank[COMP_LVLS-1][0])
 					begin
-						// Output post insertion rank and metadata
-	                    ins_rank_out <= max_rank[COMP_LVLS-1][0];
-	                    ins_meta_out <= max_meta[COMP_LVLS-1][0];
-					    ins_valid_out <= 1'b1;
+						// Replace largest value
 						rank[max_idx[COMP_LVLS-1][0]] <= rank_in;
 						meta[max_idx[COMP_LVLS-1][0]] <= meta_in;
 					end
-					else
-					begin
-	                    ins_rank_out <= rank_in;
-	                    ins_meta_out <= meta_in;
-					    ins_valid_out <= 1'b1;					    
-					end
+					full <= 1'b1;
 				end
+				empty <= 1'b0;
 			    calc_min_max <= 1;
 				insert_ltch <= 0;
 			end
