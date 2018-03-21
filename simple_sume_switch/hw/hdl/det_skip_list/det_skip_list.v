@@ -4,9 +4,9 @@ module det_skip_list
 #(
 	parameter L2_MAX_SIZE = 5,
 	parameter RANK_WIDTH = 10,
-        parameter META_WIDTH = 20,
-	parameter HSP_WIDTH = META_WIDTH/2,
-	parameter MDP_WIDTH = META_WIDTH/2,
+       parameter META_WIDTH = 20,
+       parameter HSP_WIDTH = META_WIDTH/2,
+       parameter MDP_WIDTH = META_WIDTH/2,
     parameter L2_REG_WIDTH = 2,
 	parameter ENQ_FIFO_DEPTH = 16
 )
@@ -20,23 +20,24 @@ module det_skip_list
 	output [RANK_WIDTH-1:0] rank_out,
 	output [HSP_WIDTH+MDP_WIDTH-1:0] meta_out,
 	output valid_out,
-	output reg [L2_MAX_SIZE-1:0] num_entries,
-	output reg busy
+        output reg [L2_MAX_SIZE-1:0] num_entries,
+        output reg busy,
+	output full
 );
 
-   function integer log2;
-      input integer number;
-      begin
-         log2=0;
-         while(2**log2<number) begin
-            log2=log2+1;
-         end
-      end
-   endfunction // log2
+    function integer log2;
+       input integer number;
+       begin
+          log2=0;
+          while(2**log2<number) begin
+             log2=log2+1;
+          end
+       end
+    endfunction // log2
 
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
 	localparam REG_WIDTH = 2**L2_REG_WIDTH;
-	localparam NUM_LVLS = L2_MAX_SIZE;
+        localparam NUM_LVLS = L2_MAX_SIZE;
         localparam L2_NUM_LVLS = log2(NUM_LVLS) + 1;
     localparam MAX_CONS_NODES = 3;
 //	localparam META_WIDTH = HSP_WIDTH + MDP_WIDTH;
@@ -84,7 +85,6 @@ module det_skip_list
 	reg remove_ltch;
 	reg pr_insert;
 	reg sl_insert;
-	reg sl_remove;
 	reg [RANK_WIDTH-1:0] pr_rank_in;
 	reg [META_WIDTH-1:0] pr_meta_in;
 	reg [RANK_WIDTH-1:0] sl_rank_in;
@@ -174,6 +174,7 @@ module det_skip_list
 	wire pr_empty;
 	wire pr_full;
 	reg [L2_MAX_SIZE-1:0] deq_node;
+	reg [L2_MAX_SIZE-1:0] rmv_node;
 	wire free_nodes_avail;
 
 	assign rank_rd = 1'b1;
@@ -356,6 +357,9 @@ module det_skip_list
         .empty       ()
     );
     
+	// Assert skip list full when not enough free nodes are available 
+	assign full = ~free_nodes_avail;
+	
     pifo_reg
     #(
     	.L2_MAX_SIZE (L2_REG_WIDTH),
@@ -394,7 +398,6 @@ module det_skip_list
 			free_list_wr <= 1'b0;
 			pr_insert <= 1'b0;
 			sl_insert <= 1'b0;
-			sl_remove <= 1'b0;
 			sl_valid_out <= 1'b0;
 			busy <= 1'b1;
 			num_entries <= 0;
@@ -420,7 +423,6 @@ module det_skip_list
 		    free_list_wr <= 1'b0;
 			pr_insert <= 1'b0;
 			sl_insert <= 1'b0;
-			sl_remove <= 1'b0;
 			sl_valid_out <= 1'b0;
 			rank_wr <= 1'b0;
 			hsp_wr <= 1'b0;
@@ -539,10 +541,7 @@ module det_skip_list
 			
 			RUN:
 				if (remove == 1'b1 && num_entries > 0)
-				begin
-				    sl_remove <= 1'b1;
 					main_state <= REMOVE;
-			    end
 				else if (insert == 1'b1 && num_entries < MAX_SIZE)
 				    if (num_entries == 0) 
 					    if (pr_full == 1'b0)
@@ -666,10 +665,7 @@ module det_skip_list
 				begin
 					num_entries <= num_entries + 1;
 					if ((remove == 1'b1 || remove_ltch == 1'b1) && num_entries > 0)
-					begin
-				        //sl_remove <= 1'b1;
 						main_state <= REMOVE;
-					end
 					else
 						main_state <= RUN;
 				end
@@ -851,7 +847,6 @@ module det_skip_list
                     currMaxLevel <= currMaxLevel + 1;
 				    u <= d;
                     n <= dD;
-//                    n <= dptr_dout;
                     level <= level - 1;
 
                     search_state <= GO_DOWN;
@@ -978,12 +973,7 @@ module det_skip_list
 				lptr_din <= lptr_dout;
 				lptr_wr <= 1'b1;
 				// Clear dequeued node
-				//rptr_waddr <= deq_node;
-				//rptr_din <= {L2_MAX_SIZE{1'b1}};
-				//rptr_wr <= 1'b1;
-				//lptr_waddr <= deq_node;
-				//lptr_din <= {L2_MAX_SIZE{1'b1}};
-				//lptr_wr <= 1'b1;
+				// No need to clear right/left pointers since they're always overwritten on insert
 				uptr_waddr <= deq_node;
 				uptr_din <= {L2_MAX_SIZE{1'b1}};
 				uptr_wr <= 1'b1;
@@ -1000,6 +990,7 @@ module det_skip_list
 					lptr_raddr <= uptr_dout;
 				    uptr_raddr <= uptr_dout;
 				    bram_rd <= 1'b1;
+					rmv_node <= uptr_dout;
 					rmv_lvl <= 1;
 				    remove_state <= RMV_WAIT_MEM_RD3;
 				end
@@ -1023,18 +1014,23 @@ module det_skip_list
 				lptr_waddr <= tail[rmv_lvl];
 				lptr_din <= lptr_dout;
 				lptr_wr <= 1'b1;
-				uptr_waddr <= uptr_dout;
+				// Clear node and return it
+				uptr_waddr <= rmv_node;
 		        uptr_din <= {L2_MAX_SIZE{1'b1}};
 			    uptr_wr <= 1'b1;
-			    dptr_waddr <= uptr_dout;
+			    dptr_waddr <= rmv_node;
 			    dptr_din <= {L2_MAX_SIZE{1'b1}};
 			    dptr_wr <= 1'b1;
-			    free_list_din <= uptr_dout;
+			    free_list_din <= rmv_node;
 				free_list_wr <= 1'b1;
 				if (uptr_dout != {L2_MAX_SIZE{1'b1}})
 				begin
+				    rptr_raddr <= uptr_dout;
+					lptr_raddr <= uptr_dout;
 			        uptr_raddr <= uptr_dout;
 				    bram_rd <= 1'b1;
+					rmv_node <= uptr_dout;
+					rmv_lvl <= rmv_lvl + 1;
 					remove_state <= RMV_WAIT_MEM_RD3;
 				end
 				else
@@ -1053,72 +1049,6 @@ module det_skip_list
 	end
 endmodule
 	
-
-//    def deq_sl (self):
-//        while True:
-//            try:
-//                # Wait one clock
-//                yield self.env.timeout(self.period)
-//                // If there's room in out reg and there are entries in skip list and it's not busy
-//                if (self.outreg.num_entries < self.outreg.width) and self.num_entries > self.outreg.num_entries and self.busy == 0:
-//                    self.busy = 1
-//                    # Point to tail node in level 0
-//                    t = self.tail[0]
-//                    # Read tail
-//                    self.nodes_r_in_pipe.put(t)
-//                    tVal, tHsp, tMdp, tLvl, tR, tL, tU, tD = yield self.nodes_r_out_pipe.get()
-//                    # Read node to dequeue
-//                    self.nodes_r_in_pipe.put(tL)
-//                    dqVal, dqHsp, dqMdp, dqLvl, dqR, dqL, dqU, dqD = yield self.nodes_r_out_pipe.get()
-//                    
-//                    # Send dequeued value to out reg
-//                    self.outreg.ins_in_pipe.put((dqVal, [dqHsp, dqMdp]))
-//                    (tmpVal, tmpPtrs) = yield self.outreg_ins_out_pipe.get()
-//                    # tmpVal should be -1 because there was room available in out reg
-//                    if tmpVal != -1:
-//                        print ("Dequeue Error!: Received non-null value from out reg:", tmpVal, tmpPtrs)
-//                
-//                    # Read left neighbor
-//                    self.nodes_r_in_pipe.put(dqL)
-//                    llVal, llHsp, llMdp, llLvl, llR, llL, llU, llD = yield self.nodes_r_out_pipe.get()
-//                    # Connect left neighbor to tail
-//                    self.nodes_w_in_pipe.put((dqL,[llVal, llHsp, llMdp, llLvl, t, llL, llU, llD]))
-//                    yield self.nodes_w_out_pipe.get()
-//                    self.nodes_w_in_pipe.put((t,[tVal, tHsp, tMdp, tLvl, tR, dqL, tU, tD]))
-//                    yield self.nodes_w_out_pipe.get()
-//                    
-//                    # Clear node and return it to free list
-//                    self.nodes_w_in_pipe.put((tL, [-1, -1, -1, -1, -1, -1, -1, -1]))
-//                    yield self.nodes_w_out_pipe.get()
-//                    self.free_node_list.push(tL)
-//                    
-//                    # Loop to free any nodes above
-//                    while dqU != -1:
-//                        # Read up neighbor
-//                        self.nodes_r_in_pipe.put(dqU)
-//                        uVal, uHsp, uMdp, uLvl, uR, uL, uU, uD = yield self.nodes_r_out_pipe.get()
-//                        # Read tail connected to this node
-//                        self.nodes_r_in_pipe.put(uR)
-//                        tVal, tHsp, tMdp, tLvl, tR, tL, tU, tD = yield self.nodes_r_out_pipe.get()
-//                        # Read left neighbor
-//                        self.nodes_r_in_pipe.put(uL)
-//                        lVal, lHsp, lMdp, lLvl, lR, lL, lU, lD = yield self.nodes_r_out_pipe.get()
-//                        # Connect left neighbor to tail
-//                        self.nodes_w_in_pipe.put((uL,[lVal, lHsp, lMdp, lLvl, uR, lL, lU, lD]))
-//                        self.nodes_w_out_pipe.get()
-//                        self.nodes_w_in_pipe.put((uR,[tVal, tHsp, tMdp, tLvl, tR, uL, tU, tD]))
-//                        self.nodes_w_out_pipe.get()
-//                        # If level is empty, decrement current max level
-//                        if tLvl == self.currMaxLevel and uL == self.head[self.currMaxLevel]:
-//                            self.currMaxLevel -= 1
-//                        # Clear node and return it to free list
-//                        self.nodes_w_in_pipe.put((dqU, [-1, -1, -1, -1, -1, -1, -1, -1]))
-//                        yield self.nodes_w_out_pipe.get()
-//                        self.free_node_list.push(dqU)
-//                        # Move up
-//                        dqU = uU
-//    
-//                    self.busy = 0
 
 
 
