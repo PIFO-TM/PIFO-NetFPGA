@@ -4,9 +4,9 @@ module det_skip_list
 #(
 	parameter L2_MAX_SIZE = 5,
 	parameter RANK_WIDTH = 10,
-	parameter META_WIDTH = 20,
-	parameter HSP_WIDTH = META_WIDTH/2,
-	parameter MDP_WIDTH = META_WIDTH/2,
+        parameter META_WIDTH = 20,
+        parameter HSP_WIDTH = META_WIDTH/2,
+        parameter MDP_WIDTH = META_WIDTH/2,
     parameter L2_REG_WIDTH = 2
 )
 (
@@ -19,8 +19,8 @@ module det_skip_list
 	output [RANK_WIDTH-1:0] rank_out,
 	output [HSP_WIDTH+MDP_WIDTH-1:0] meta_out,
 	output valid_out,
-    output reg busy,
-    output reg [L2_MAX_SIZE-1:0] num_entries
+        output reg busy,
+        output reg [L2_MAX_SIZE-1:0] num_entries
 );
 
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
@@ -77,7 +77,6 @@ module det_skip_list
 	reg [RANK_WIDTH-1:0] pr_rank_in;
 	reg [META_WIDTH-1:0] pr_meta_in;
 	reg [RANK_WIDTH-1:0] sl_rank_in;
-	reg [RANK_WIDTH-1:0] sl_rank_out;
 	reg [META_WIDTH-1:0] sl_meta_in;
 	reg sl_valid_out;
 	reg [RANK_WIDTH-1:0] search_rank;
@@ -88,10 +87,9 @@ module det_skip_list
     reg [L2_MAX_SIZE-1:0] l;
     reg [L2_MAX_SIZE-1:0] u;
     reg [L2_MAX_SIZE-1:0] d;
-	reg [L2_MAX_SIZE-1:0] m;
     reg [L2_MAX_SIZE-1:0] uR;
 	reg [L2_MAX_SIZE-1:0] dR;
-    reg [L2_MAX_SIZE-1:0] dD;
+	reg [L2_MAX_SIZE-1:0] dD;
 	wire [L2_MAX_SIZE-1:0] new_node;
 	reg [RANK_WIDTH-1:0] lVal;
 	reg [2:0] main_state;
@@ -100,7 +98,6 @@ module det_skip_list
 	reg [2:0] remove_state;
 	reg [L2_NUM_LVLS-1:0] lvl_cntr;
 	reg [L2_MAX_SIZE-1:0] node_cntr;
-//	reg busy;
 //	reg [L2_MAX_SIZE-1:0] num_entries;
 	reg [L2_MAX_SIZE-1:0] rank_raddr;
 	reg [L2_MAX_SIZE-1:0] rank_waddr;
@@ -152,7 +149,7 @@ module det_skip_list
 	reg dptr_wr;
 	wire [RANK_WIDTH-1:0] pr_max_rank;
 	wire [META_WIDTH-1:0] pr_max_meta;
-	
+	reg drop_down_node;
 	wire pr_max_valid;
 	reg get_next_node;
 	reg search_done;
@@ -671,7 +668,7 @@ module det_skip_list
 	
 			// Search state machine
             case(search_state)
-            SRCH_IDLE: 
+            SRCH_IDLE: // 0
 			    if (start_search == 1'b1) 
 				begin
                     level <= currMaxLevel;
@@ -680,7 +677,7 @@ module det_skip_list
                     search_state <= GO_DOWN;
                 end
 			
-            GO_DOWN:
+            GO_DOWN: // 1
 				if (level != {L2_NUM_LVLS{1'b1}})
 				begin
                     cons_nodes <= 0;
@@ -700,13 +697,12 @@ module det_skip_list
 					search_state <= SRCH_IDLE;
 				end
 				
-			WAIT_MEM_RD1:
+			WAIT_MEM_RD1: // 2
 			    if (bram_rd1 == 1'b1)
 					search_state <= GO_RIGHT1;
 			
-            GO_RIGHT1:
+            GO_RIGHT1: // 3
 			begin
-				//dD <= dptr_dout;
 				if (store_d == 1'b1)
 				begin
 				    dR <= rptr_dout;
@@ -724,6 +720,7 @@ module det_skip_list
 					lvl_raddr <= rptr_dout;
 					rptr_raddr <= rptr_dout;
                     uptr_raddr <= rptr_dout;
+					dptr_raddr <= rptr_dout;
 					bram_rd <= 1'b1;
 					search_state <= WAIT_MEM_RD2;
 				end
@@ -736,47 +733,59 @@ module det_skip_list
 				end
 			end
 			
-			WAIT_MEM_RD2:
-                // Save the node at which we will drop down
+			WAIT_MEM_RD2: // 4
 			    if (bram_rd1 == 1'b1)
-				begin
 					search_state <= GO_RIGHT2;
-				end 
 			
-			GO_RIGHT2:
+			GO_RIGHT2: // 5
 			begin
                 // Save the node at which we will drop down
 			    if (rank_dout > search_rank)
 				begin
 				    d <= n;
-				    dR = rptr_dout;
+				    dR <= rptr_dout;
+					dD <= dptr_dout;
+					// Note: blocking assignment used in case we hit drop down node AND a higher node stack at the same node/clock
+					drop_down_node = 1'b1;
 			    end
+				else
+				    drop_down_node = 1'b0;
 				
                 // Exit if reached a higher node stack
-                if (uptr_dout != -1)
+                if (uptr_dout != {L2_MAX_SIZE{1'b1}})
+				begin
+	                u <= n;
+					// If drop down node (dD) was assigned this clock cycle, use output from dptr bram directly
+                    if (drop_down_node == 1'b1)
+					    n <= dptr_dout;
+					else
+					    // Otherwise use value stored in dD
+					    n <= dD;
+				    level <= level - 1;
                     search_state <= GO_DOWN;
-
-                // Count consecutive nodes except for head
-                cons_nodes <= cons_nodes + 1;
-                // If max number of consecutive nodes found
-                if (cons_nodes == MAX_CONS_NODES)
-			    begin
-                    // Insert new node one level above
-                    // Read node in level above
-				    rptr_raddr <= u;
-					bram_rd <= 1'b1;
-
- 					search_state <= WAIT_MEM_RD3;
 				end
                 else
-					search_state <= GO_RIGHT1;
+                    // If max number of consecutive nodes found
+                    if (cons_nodes == MAX_CONS_NODES-1)
+			        begin
+                        // Insert new node one level above
+                        // Read node in level above
+				        rptr_raddr <= u;
+					    bram_rd <= 1'b1;
+
+ 					    search_state <= WAIT_MEM_RD3;
+				    end
+                    else
+					    search_state <= GO_RIGHT1;
+                // Count consecutive nodes except for head
+                cons_nodes <= cons_nodes + 1;
 			end
 			
-			WAIT_MEM_RD3:
+			WAIT_MEM_RD3: // 6
 			    if (bram_rd1 == 1'b1)
 					search_state <= SRCH_CONN_NEW;
 			
-            SRCH_CONN_NEW:
+            SRCH_CONN_NEW:  // 7
             begin			
 
 				uR <= rptr_dout;
@@ -803,7 +812,7 @@ module det_skip_list
 				search_state <= SRCH_CONN_NEAR;
             end
 			
-			SRCH_CONN_NEAR:
+			SRCH_CONN_NEAR:  // 8
 			begin
                 // Connect right neighbor to new node
 				lptr_waddr <= uR;
