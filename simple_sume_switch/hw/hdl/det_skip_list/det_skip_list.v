@@ -5,9 +5,10 @@ module det_skip_list
 	parameter L2_MAX_SIZE = 5,
 	parameter RANK_WIDTH = 10,
         parameter META_WIDTH = 20,
-        parameter HSP_WIDTH = META_WIDTH/2,
-        parameter MDP_WIDTH = META_WIDTH/2,
-    parameter L2_REG_WIDTH = 2
+	parameter HSP_WIDTH = META_WIDTH/2,
+	parameter MDP_WIDTH = META_WIDTH/2,
+    parameter L2_REG_WIDTH = 2,
+	parameter ENQ_FIFO_DEPTH = 16
 )
 (
     input rst,
@@ -19,14 +20,24 @@ module det_skip_list
 	output [RANK_WIDTH-1:0] rank_out,
 	output [HSP_WIDTH+MDP_WIDTH-1:0] meta_out,
 	output valid_out,
-        output reg busy,
-        output reg [L2_MAX_SIZE-1:0] num_entries
+	output reg [L2_MAX_SIZE-1:0] num_entries,
+	output reg busy
 );
+
+   function integer log2;
+      input integer number;
+      begin
+         log2=0;
+         while(2**log2<number) begin
+            log2=log2+1;
+         end
+      end
+   endfunction // log2
 
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
 	localparam REG_WIDTH = 2**L2_REG_WIDTH;
-    localparam L2_NUM_LVLS = 2;
-	localparam NUM_LVLS = 2**L2_NUM_LVLS;
+	localparam NUM_LVLS = L2_MAX_SIZE;
+        localparam L2_NUM_LVLS = log2(NUM_LVLS) + 1;
     localparam MAX_CONS_NODES = 3;
 //	localparam META_WIDTH = HSP_WIDTH + MDP_WIDTH;
 	
@@ -163,6 +174,7 @@ module det_skip_list
 	wire pr_empty;
 	wire pr_full;
 	reg [L2_MAX_SIZE-1:0] deq_node;
+	wire free_nodes_avail;
 
 	assign rank_rd = 1'b1;
 	
@@ -328,7 +340,7 @@ module det_skip_list
     #(
          .WIDTH(L2_MAX_SIZE),
          .MAX_DEPTH_BITS(L2_MAX_SIZE),
-         .PROG_FULL_THRESHOLD(2**L2_MAX_SIZE - 1)
+         .PROG_FULL_THRESHOLD(NUM_LVLS)
     )
     node_free_list
     (
@@ -340,7 +352,7 @@ module det_skip_list
         .dout        (new_node),
         .full        (),
         .nearly_full (),
-        .prog_full   (),
+        .prog_full   (free_nodes_avail),
         .empty       ()
     );
     
@@ -516,7 +528,7 @@ module det_skip_list
                 // Push all free nodes in free list FIFO
                 free_list_din <= node_cntr;
 				free_list_wr <= 1'b1;
-				if (node_cntr == MAX_SIZE - 1)
+				if (node_cntr == MAX_SIZE - 2)
 				begin
 				    main_state <= RUN;
 					busy <= 1'b0;
@@ -559,7 +571,7 @@ module det_skip_list
 							busy <= 1'b1;
 					        main_state <= INSERT;
 						end
-					else
+					else if (free_nodes_avail == 1'b1)
 					begin
 					    if (pr_full == 1'b1)
 					        if (rank_in < pr_max_rank)
@@ -618,7 +630,7 @@ module det_skip_list
 							    busy <= 1'b1;
 					            main_state <= INSERT;
 						    end
-					    else
+					    else if (free_nodes_avail == 1'b1)
 					    begin
 					        if (pr_full == 1'b1)
 					            if (rank_in < pr_max_rank)
@@ -706,6 +718,7 @@ module det_skip_list
 				if (store_d == 1'b1)
 				begin
 				    dR <= rptr_dout;
+					dD <= dptr_dout;
 					store_d = 1'b0;
 				end
                 if (rptr_dout != {L2_MAX_SIZE{1'b1}})
@@ -754,7 +767,7 @@ module det_skip_list
                 // Exit if reached a higher node stack
                 if (uptr_dout != {L2_MAX_SIZE{1'b1}})
 				begin
-	                u <= n;
+	                u <= d;
 					// If drop down node (dD) was assigned this clock cycle, use output from dptr bram directly
                     if (drop_down_node == 1'b1)
 					    n <= dptr_dout;
@@ -837,7 +850,8 @@ module det_skip_list
 			    begin
                     currMaxLevel <= currMaxLevel + 1;
 				    u <= d;
-                    n <= dptr_dout;
+                    n <= dD;
+//                    n <= dptr_dout;
                     level <= level - 1;
 
                     search_state <= GO_DOWN;
