@@ -100,10 +100,9 @@ module simple_tm_sl_bp
 
    //--------------------- Internal Parameters-------------------------
    /* For Insertion FSM */
-   localparam WRITE_STORAGE        = 1;
-   localparam WRITE_PIFO           = 2;
-   localparam FINISH_PKT           = 4;
-   localparam IFSM_NUM_STATES      = 3;
+   localparam WAIT_START           = 1;
+   localparam FINISH_PKT           = 2;
+   localparam IFSM_NUM_STATES      = 2;
 
    localparam SEG_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam META_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
@@ -222,60 +221,39 @@ module simple_tm_sl_bp
       // default values
       ifsm_state_next   = ifsm_state;
 
-//      s_axis_tvalid_storage = 0;
       s_axis_tready = s_axis_tready_storage;
-
-      rank_in_next = rank_in;
-      ptrs_in_next = ptrs_in;
 
       pifo_insert = 0;
       pifo_rank_in = 0;
       pifo_meta_in = 0;
 
       case(ifsm_state)
-          WRITE_STORAGE: begin
+          WAIT_START: begin
               // don't assert tready until both storage and pifo are ready
               s_axis_tready = s_axis_tready_storage & ~pifo_busy & ~pifo_full;
               // Wait until the first word of the pkt
               if (s_axis_tready && s_axis_tvalid) begin
                   s_axis_tvalid_storage = 1;
-                  // register the rank, and pointers returned from pkt_storage
-                  rank_in_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
-                  ptrs_in_next = storage_ptr_out_tdata;
+                  // write the rank and ptrs into the pifo
+                  pifo_insert = 1;
+                  pifo_rank_in = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
+                  pifo_meta_in = storage_ptr_out_tdata;
                   // TODO: static simulation check that storage_ptr_out_tvalid == 1
                   // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
-                  // transition to WRITE_PIFO state
-                  ifsm_state_next = WRITE_PIFO;
+                  // Finish writing the pkt to storage
+                  ifsm_state_next = FINISH_PKT;
               end
               else begin
                   s_axis_tvalid_storage = 0;
               end
           end
 
-          WRITE_PIFO: begin
-              s_axis_tvalid_storage = s_axis_tvalid;
-              // Will always be in this state for the second word of the pkt
-              // Insert rank and ptrs into PIFO
-              pifo_insert = 1;
-              pifo_rank_in = rank_in;
-              pifo_meta_in = ptrs_in;
-
-              // If this is the last word of the pkt then transition to the WRITE_STORAGE state.
-              // Otherwise, transition to the FINISH_PKT state
-              if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
-                  ifsm_state_next = WRITE_STORAGE;
-              end
-              else begin
-                  ifsm_state_next = FINISH_PKT;
-              end              
-          end
-
           FINISH_PKT: begin
               s_axis_tvalid_storage = s_axis_tvalid;
               // Wait until the end of the pkt before going back to WRITE_STORAGE state
               if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
-                  ifsm_state_next = WRITE_STORAGE;
+                  ifsm_state_next = WAIT_START;
               end
               else begin
                   ifsm_state_next = FINISH_PKT;
@@ -286,16 +264,10 @@ module simple_tm_sl_bp
 
    always @(posedge axis_aclk) begin
       if(~axis_resetn) begin
-         ifsm_state <= WRITE_STORAGE;
-
-         rank_in <= 0;
-         ptrs_in <= 0;
+         ifsm_state <= WAIT_START;
       end
       else begin
          ifsm_state <= ifsm_state_next;
-
-         rank_in <= rank_in_next;
-         ptrs_in <= ptrs_in_next;
       end
    end
 
