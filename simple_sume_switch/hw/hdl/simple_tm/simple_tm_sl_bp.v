@@ -59,10 +59,10 @@ module simple_tm_sl_bp
     parameter RANK_POS             = 32,
 
     // max num pkts the pifo can store
-    parameter PIFO_DEPTH           = 16,
-    parameter PIFO_REG_DEPTH       = 16,
+    parameter PIFO_DEPTH           = 2048,
+    parameter PIFO_REG_DEPTH       = 32,
     // max # 64B pkts that can fit in storage
-    parameter STORAGE_MAX_PKTS     = 4096,
+    parameter STORAGE_MAX_PKTS     = 2048,
     parameter NUM_SKIP_LISTS       = 1
 )
 (
@@ -124,6 +124,7 @@ module simple_tm_sl_bp
    wire [PTRS_WIDTH-1:0]   pifo_meta_out;
    wire                    pifo_valid_out;
    wire                    pifo_busy;
+   wire                    pifo_full;
 
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
@@ -187,14 +188,14 @@ module simple_tm_sl_bp
    );
 
     /* PIFO to store rank values and pointers */ 
-//    det_skip_list
-    pifo_top
+    det_skip_list
+//    pifo_top
     #(
      .L2_MAX_SIZE(log2(PIFO_DEPTH)),
      .RANK_WIDTH(RANK_WIDTH),
      .META_WIDTH(PTRS_WIDTH),
-     .L2_REG_WIDTH(log2(PIFO_REG_DEPTH)),
-     .NUM_SKIP_LISTS(NUM_SKIP_LISTS)
+     .L2_REG_WIDTH(log2(PIFO_REG_DEPTH))
+//     .NUM_SKIP_LISTS(NUM_SKIP_LISTS)
     )
     pifo_inst
     (
@@ -207,7 +208,8 @@ module simple_tm_sl_bp
      .rank_out  (pifo_rank_out),
      .meta_out  (pifo_meta_out),
      .valid_out (pifo_valid_out),
-     .busy      (pifo_busy)
+     .busy      (pifo_busy),
+     .full      (pifo_full)
     );
 
 
@@ -233,7 +235,7 @@ module simple_tm_sl_bp
       case(ifsm_state)
           WRITE_STORAGE: begin
               // don't assert tready until both storage and pifo are ready
-              s_axis_tready = s_axis_tready_storage & ~pifo_busy;
+              s_axis_tready = s_axis_tready_storage & ~pifo_busy & ~pifo_full;
               // Wait until the first word of the pkt
               if (s_axis_tready && s_axis_tvalid) begin
                   s_axis_tvalid_storage = 1;
