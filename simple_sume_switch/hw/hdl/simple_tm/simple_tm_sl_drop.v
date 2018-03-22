@@ -119,6 +119,15 @@ module simple_tm_sl_drop
 
    localparam MAX_PKT_SIZE = 24; // measured in 64B chunks
 
+   localparam S_Q_WAIT_START = 0;
+   localparam S_Q_WAIT_END_ENQ = 1;
+   localparam S_Q_WAIT_END_DROP = 2;
+   localparam L2_S_Q_NUM_STATES = 2;
+
+   localparam M_Q_WAIT_START = 0;
+   localparam M_Q_WAIT_END   = 1;
+   localparam L2_M_Q_NUM_STATES = 1;
+
    //---------------------- Wires and Regs ---------------------------- 
 
    reg  s_axis_tvalid_storage;
@@ -138,6 +147,8 @@ module simple_tm_sl_drop
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
    reg  [RANK_WIDTH-1 : 0]              rank_in, rank_in_next;
    reg  [PTRS_WIDTH-1 : 0]              ptrs_in, ptrs_in_next;
+   reg pkt_in_accepted;
+//   reg pkt_in_accepted, pkt_in_accepted_r, pkt_in_accepted_r_next;
 
    wire [PTRS_WIDTH - 1 : 0]    storage_ptr_out_tdata;
    wire                         storage_ptr_out_tvalid;
@@ -148,10 +159,21 @@ module simple_tm_sl_drop
    wire                         storage_ptr_in_tready;
    reg                          storage_ptr_in_tlast;
 
+   // signals and regs for q size updates
+   reg [Q_ID_WIDTH-1:0] curr_s_q_id, s_q_id, s_q_id_r, s_q_id_r_next;
+   reg [Q_ID_WIDTH-1:0] curr_m_q_id, m_q_id, m_q_id_r, m_q_id_r_next;
+
+   reg [L2_S_Q_NUM_STATES-1:0] s_q_state_next, s_q_state;
+   reg [L2_M_Q_NUM_STATES-1:0] m_q_state_next, m_q_state;
+
+   reg [Q_SIZE_BITS-1:0] s_q_inc_val;
+   reg [Q_SIZE_BITS-1:0] m_q_dec_val;
+
+   reg s_q_update_size_r, s_q_update_size_r_next;
+   reg m_q_update_size_r, m_q_update_size_r_next;
+
    reg [Q_SIZE_BITS-1:0] q_size_r      [NUM_QUEUES-1:0];
    reg [Q_SIZE_BITS-1:0] q_size_r_next [NUM_QUEUES-1:0];
-   reg [Q_ID_WIDTH-1:0]  q_id, q_id_r, q_id_r_next;
-   reg update_q_size_r, update_q_size_r_next;
  
    //-------------------- Modules and Logic ---------------------------
 
@@ -229,7 +251,6 @@ module simple_tm_sl_drop
     *   - submits a write request to the pifo consisting of the rank and ptrs 
     */
 
-   integer j;
    always @(*) begin
       // default values
       ifsm_state_next   = ifsm_state;
@@ -240,23 +261,14 @@ module simple_tm_sl_drop
       pifo_rank_in = 0;
       pifo_meta_in = 0;
 
-      q_id = s_axis_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
-      if (q_id >= NUM_QUEUES)
-          $display("WARNING: q_id on tuser bus packet out of allowable range, q_id = %d\n", q_id);
-
-      // default: don't update q_size
-      for (j=0; j<NUM_QUEUES; j=j+1) begin
-          q_size_r_next[j] = q_size_r[j]; 
-      end
-
-      q_id_r_next = q_id_r;
-      update_q_size_r_next = update_q_size_r;
+//      pkt_in_accepted = pkt_in_accepted_r;
+//      pkt_in_accepted_r_next = pkt_in_accepted_r;
 
       case(ifsm_state)
           WAIT_START: begin
               // Wait until the first word of the pkt
               if (s_axis_tready && s_axis_tvalid) begin
-                  if (s_axis_tready_storage & ~pifo_busy & ~pifo_full & (q_size_r[q_id] < QUEUE_LIMIT - MAX_PKT_SIZE)) begin
+                  if (s_axis_tready_storage & ~pifo_busy & ~pifo_full & (q_size_r[s_q_id] < QUEUE_LIMIT - MAX_PKT_SIZE)) begin
                       s_axis_tvalid_storage = 1;
                       // register the rank, and pointers returned from pkt_storage
                       pifo_insert = 1;
@@ -265,40 +277,30 @@ module simple_tm_sl_drop
                       // TODO: static simulation check that storage_ptr_out_tvalid == 1
                       // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
-                      // update q_size
-                      q_size_r_next[q_id] = q_size_r_next[q_id] + 1;
-                      update_q_size_r_next = 0;
-                      q_id_r_next = q_id;
+                      pkt_in_accepted = 1;
+//                      pkt_in_accepted_r_next = 1;
 
                       // transition to WRITE_PIFO state
                       ifsm_state_next = FINISH_PKT;
                   end
                   else begin
                       // drop the pkt
+                      pkt_in_accepted = 0;
+//                      pkt_in_accepted_r_next = 0;
                       s_axis_tvalid_storage = 0;
                       ifsm_state_next = DROP_PKT;
                   end
               end
               else begin
+                      pkt_in_accepted = 0;
                       s_axis_tvalid_storage = 0;
               end
           end
 
           FINISH_PKT: begin
+              pkt_in_accepted = 1; 
               // Wait until the end of the pkt before going back to WAIT_START state
               s_axis_tvalid_storage = s_axis_tvalid;
-
-              // count 64B chunks of the packet (i.e. increment every other word, starting with the first word of the pkt)
-              if (s_axis_tvalid & s_axis_tready) begin
-                  if (update_q_size_r) begin
-                      q_size_r_next[q_id_r] = q_size_r_next[q_id_r] + 1;
-                      update_q_size_r_next = 0;
-                  end
-                  else begin
-                      update_q_size_r_next = 1;
-                  end
-              end
- 
               if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
                   ifsm_state_next = WAIT_START;
               end
@@ -308,6 +310,7 @@ module simple_tm_sl_drop
           end
 
           DROP_PKT: begin
+              pkt_in_accepted = 0; 
               s_axis_tvalid_storage = 0;
               // Wait until the end of the pkt before going back to WRITE_STORAGE state
               if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
@@ -321,27 +324,162 @@ module simple_tm_sl_drop
       endcase // case(ifsm_state)
    end // always @ (*)
 
-   integer i;
    always @(posedge axis_aclk) begin
       if(~axis_resetn) begin
          ifsm_state <= WAIT_START;
-
-         q_id_r <= 0;
-         update_q_size_r <= 0;
-         for (i=0; i<NUM_QUEUES; i=i+1) begin
-             q_size_r[i] <= 0; 
-         end
+//         pkt_in_accepted_r <= 0;
       end
       else begin
          ifsm_state <= ifsm_state_next;
+//         pkt_in_accepted_r <= pkt_in_accepted_r_next;
+      end
+   end
 
-         q_id_r <= q_id_r_next;
-         update_q_size_r <= update_q_size_r_next;
+   /* Logic to update the queue size counters */
+   integer j;
+   always @(*) begin
+      // q_id on the input side
+      curr_s_q_id = s_axis_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
+      if (curr_s_q_id >= NUM_QUEUES)
+          $display("WARNING: q_id on s_axis_tuser bus packet out of allowable range, q_id = %d\n", s_q_id);
+
+      // q_id on the output side
+      curr_m_q_id = m_axis_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
+      if (curr_m_q_id >= NUM_QUEUES)
+          $display("WARNING: q_id on m_axis_tuser bus packet out of allowable range, q_id = %d\n", s_q_id);
+
+      s_q_state_next = s_q_state;
+      m_q_state_next = m_q_state;
+
+      s_q_id = s_q_id_r;
+      m_q_id = m_q_id_r;
+      s_q_id_r_next = s_q_id_r;
+      m_q_id_r_next = m_q_id_r;
+
+      s_q_inc_val = 0;
+      m_q_dec_val = 0;
+
+      s_q_update_size_r_next = s_q_update_size_r;
+      m_q_update_size_r_next = m_q_update_size_r;
+
+      case(s_q_state)
+          S_Q_WAIT_START: begin
+              if (s_axis_tvalid & s_axis_tready) begin
+                  if (pkt_in_accepted) begin
+                      s_q_inc_val = 1;
+                      s_q_id = curr_s_q_id;
+                      s_q_id_r_next = curr_s_q_id;
+                      s_q_update_size_r_next = 0;
+                      s_q_state_next = S_Q_WAIT_END_ENQ;
+                  end
+                  else begin
+                      s_q_state_next = S_Q_WAIT_END_DROP;
+                  end
+              end
+          end
+
+          S_Q_WAIT_END_ENQ: begin
+              // count 64B chunks of the packet (i.e. increment every other word, starting with the first word of the pkt)
+              if (s_axis_tvalid & s_axis_tready) begin
+                  if (s_q_update_size_r) begin
+                      s_q_inc_val = 1;
+                      s_q_update_size_r_next = 0;
+                  end
+                  else begin
+                      s_q_inc_val = 0;
+                      s_q_update_size_r_next = 1;
+                  end
+              end
+
+              if (s_axis_tvalid & s_axis_tready & s_axis_tlast) begin
+                  s_q_state_next = S_Q_WAIT_START;
+              end
+          end
+
+          S_Q_WAIT_END_DROP: begin
+              if (s_axis_tvalid & s_axis_tready & s_axis_tlast) begin
+                  s_q_state_next = S_Q_WAIT_START;
+              end
+          end
+      endcase
+
+      case(m_q_state)
+          M_Q_WAIT_START: begin
+              if (m_axis_tvalid & m_axis_tready) begin
+                  m_q_dec_val = 1;
+                  m_q_id = curr_m_q_id;
+                  m_q_id_r_next = curr_m_q_id;
+                  m_q_update_size_r_next = 0;
+                  m_q_state_next = M_Q_WAIT_END;
+              end
+          end
+
+          M_Q_WAIT_END: begin
+              // count 64B chunks of the packet (i.e. increment every other word, starting with the first word of the pkt)
+              if (m_axis_tvalid & m_axis_tready) begin
+                  if (m_q_update_size_r) begin
+                      m_q_dec_val = 1;
+                      m_q_update_size_r_next = 0;
+                  end
+                  else begin
+                      m_q_dec_val = 0;
+                      m_q_update_size_r_next = 1;
+                  end
+              end
+
+              if (m_axis_tvalid & m_axis_tready & m_axis_tlast) begin
+                  m_q_state_next = M_Q_WAIT_START;
+              end
+          end
+      endcase
+
+      /* Update queue sizes */
+      for (j=0; j<NUM_QUEUES; j=j+1) begin
+          if (s_q_id == j && m_q_id == j) begin
+              q_size_r_next[j] = q_size_r[j] + s_q_inc_val - m_q_dec_val; 
+          end
+          else if (s_q_id == j) begin
+              q_size_r_next[j] = q_size_r[j] + s_q_inc_val; 
+          end
+          else if (m_q_id == j) begin
+              q_size_r_next[j] = q_size_r[j] - m_q_dec_val; 
+          end
+          else begin
+              q_size_r_next[j] = q_size_r[j]; 
+          end
+      end
+
+   end
+
+   integer i;
+   always @(posedge axis_aclk) begin
+      if(~axis_resetn) begin
+          s_q_state <= S_Q_WAIT_START;
+          m_q_state <= M_Q_WAIT_START;
+          s_q_id_r <= 0;
+          m_q_id_r <= 0;
+          s_q_update_size_r <= 0;
+          m_q_update_size_r <= 0;
+
+          for (i=0; i<NUM_QUEUES; i=i+1) begin
+              q_size_r[i] <= 0; 
+          end
+      end
+      else begin
+          s_q_state <= s_q_state_next;
+          m_q_state <= m_q_state_next;
+          s_q_id_r <= s_q_id_r_next;
+          m_q_id_r <= m_q_id_r_next;
+          s_q_update_size_r <= s_q_update_size_r_next;
+          m_q_update_size_r <= m_q_update_size_r_next;
+
          for (i=0; i<NUM_QUEUES; i=i+1) begin
              q_size_r[i] <= q_size_r_next[i]; 
          end
       end
    end
+
+
 
    /* Removal Logic: 
     *   - Read ptrs out of the PIFO and submit read requests to pkt storage
