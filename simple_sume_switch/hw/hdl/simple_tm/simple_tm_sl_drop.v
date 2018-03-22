@@ -57,12 +57,17 @@ module simple_tm_sl_drop
     parameter SRC_PORT_POS         = 16,
     parameter DST_PORT_POS         = 24,
     parameter RANK_POS             = 32,
+    parameter Q_ID_POS             = 64,
 
     // max num pkts the pifo can store
-    parameter PIFO_DEPTH           = 16,
-    parameter PIFO_REG_DEPTH       = 16,
+    parameter PIFO_DEPTH           = 2048,
+    parameter PIFO_REG_DEPTH       = 32,
     // max # 64B pkts that can fit in storage
-    parameter STORAGE_MAX_PKTS     = 4096
+    parameter STORAGE_MAX_PKTS     = 2048,
+    parameter NUM_SKIP_LISTS       = 1,
+    // Queue params
+    parameter NUM_QUEUES           = 2,
+    parameter QUEUE_LIMIT          = STORAGE_MAX_PKTS/NUM_QUEUES 
 )
 (
     // Global Ports
@@ -99,17 +104,20 @@ module simple_tm_sl_drop
 
    //--------------------- Internal Parameters-------------------------
    /* For Insertion FSM */
-   localparam WRITE_STORAGE        = 1;
-   localparam WRITE_PIFO           = 2;
-   localparam FINISH_PKT           = 4;
-   localparam DROP_PKT             = 8;
-   localparam IFSM_NUM_STATES      = 4;
+   localparam WAIT_START           = 1;
+   localparam FINISH_PKT           = 2;
+   localparam DROP_PKT             = 4;
+   localparam IFSM_NUM_STATES      = 3;
 
    localparam SEG_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam META_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam PTRS_WIDTH = SEG_ADDR_WIDTH + META_ADDR_WIDTH;
 
    localparam RANK_WIDTH = 32;
+   localparam Q_ID_WIDTH = 32;
+   localparam Q_SIZE_BITS = 32;
+
+   localparam MAX_PKT_SIZE = 24; // measured in 64B chunks
 
    //---------------------- Wires and Regs ---------------------------- 
 
@@ -124,6 +132,7 @@ module simple_tm_sl_drop
    wire [PTRS_WIDTH-1:0]   pifo_meta_out;
    wire                    pifo_valid_out;
    wire                    pifo_busy;
+   wire                    pifo_full;
 
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
@@ -139,6 +148,10 @@ module simple_tm_sl_drop
    wire                         storage_ptr_in_tready;
    reg                          storage_ptr_in_tlast;
 
+   reg [Q_SIZE_BITS-1:0] q_size_r      [NUM_QUEUES-1:0];
+   reg [Q_SIZE_BITS-1:0] q_size_r_next [NUM_QUEUES-1:0];
+   reg [Q_ID_WIDTH-1:0]  q_id, q_id_r, q_id_r_next;
+   reg update_q_size_r, update_q_size_r_next;
  
    //-------------------- Modules and Logic ---------------------------
 
@@ -206,7 +219,8 @@ module simple_tm_sl_drop
      .rank_out  (pifo_rank_out),
      .meta_out  (pifo_meta_out),
      .valid_out (pifo_valid_out),
-     .busy      (pifo_busy)
+     .busy      (pifo_busy),
+     .full      (pifo_full)
     );
 
 
@@ -215,34 +229,49 @@ module simple_tm_sl_drop
     *   - submits a write request to the pifo consisting of the rank and ptrs 
     */
 
+   integer j;
    always @(*) begin
       // default values
       ifsm_state_next   = ifsm_state;
 
-//      s_axis_tvalid_storage = 0;
       s_axis_tready = 1;
-
-      rank_in_next = rank_in;
-      ptrs_in_next = ptrs_in;
 
       pifo_insert = 0;
       pifo_rank_in = 0;
-      pifo_meta_in = 0;      
+      pifo_meta_in = 0;
+
+      q_id = s_axis_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
+      if (q_id >= NUM_QUEUES)
+          $display("WARNING: q_id on tuser bus packet out of allowable range, q_id = %d\n", q_id);
+
+      // default: don't update q_size
+      for (j=0; j<NUM_QUEUES; j=j+1) begin
+          q_size_r_next[j] = q_size_r[j]; 
+      end
+
+      q_id_r_next = q_id_r;
+      update_q_size_r_next = update_q_size_r;
 
       case(ifsm_state)
-          WRITE_STORAGE: begin
+          WAIT_START: begin
               // Wait until the first word of the pkt
               if (s_axis_tready && s_axis_tvalid) begin
-                  if (s_axis_tready_storage & ~pifo_busy) begin
+                  if (s_axis_tready_storage & ~pifo_busy & ~pifo_full & (q_size_r[q_id] < QUEUE_LIMIT - MAX_PKT_SIZE)) begin
                       s_axis_tvalid_storage = 1;
                       // register the rank, and pointers returned from pkt_storage
-                      rank_in_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
-                      ptrs_in_next = storage_ptr_out_tdata;
+                      pifo_insert = 1;
+                      pifo_rank_in = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
+                      pifo_meta_in = storage_ptr_out_tdata;
                       // TODO: static simulation check that storage_ptr_out_tvalid == 1
                       // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
+                      // update q_size
+                      q_size_r_next[q_id] = q_size_r_next[q_id] + 1;
+                      update_q_size_r_next = 0;
+                      q_id_r_next = q_id;
+
                       // transition to WRITE_PIFO state
-                      ifsm_state_next = WRITE_PIFO;
+                      ifsm_state_next = FINISH_PKT;
                   end
                   else begin
                       // drop the pkt
@@ -255,29 +284,23 @@ module simple_tm_sl_drop
               end
           end
 
-          WRITE_PIFO: begin
-              s_axis_tvalid_storage = s_axis_tvalid;
-              // Will always be in this state for the second word of the pkt (that is not dropped)
-              // Insert rank and ptrs into PIFO
-              pifo_insert = 1;
-              pifo_rank_in = rank_in;
-              pifo_meta_in = ptrs_in;
-
-              // If this is the last word of the pkt then transition to the WRITE_STORAGE state.
-              // Otherwise, transition to the FINISH_PKT state
-              if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
-                  ifsm_state_next = WRITE_STORAGE;
-              end
-              else begin
-                  ifsm_state_next = FINISH_PKT;
-              end              
-          end
-
           FINISH_PKT: begin
-              // Wait until the end of the pkt before going back to WRITE_STORAGE state
+              // Wait until the end of the pkt before going back to WAIT_START state
               s_axis_tvalid_storage = s_axis_tvalid;
+
+              // count 64B chunks of the packet (i.e. increment every other word, starting with the first word of the pkt)
+              if (s_axis_tvalid & s_axis_tready) begin
+                  if (update_q_size_r) begin
+                      q_size_r_next[q_id_r] = q_size_r_next[q_id_r] + 1;
+                      update_q_size_r_next = 0;
+                  end
+                  else begin
+                      update_q_size_r_next = 1;
+                  end
+              end
+ 
               if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
-                  ifsm_state_next = WRITE_STORAGE;
+                  ifsm_state_next = WAIT_START;
               end
               else begin
                   ifsm_state_next = FINISH_PKT;
@@ -288,7 +311,7 @@ module simple_tm_sl_drop
               s_axis_tvalid_storage = 0;
               // Wait until the end of the pkt before going back to WRITE_STORAGE state
               if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
-                  ifsm_state_next = WRITE_STORAGE;
+                  ifsm_state_next = WAIT_START;
               end
               else begin
                   ifsm_state_next = DROP_PKT;
@@ -298,18 +321,25 @@ module simple_tm_sl_drop
       endcase // case(ifsm_state)
    end // always @ (*)
 
+   integer i;
    always @(posedge axis_aclk) begin
       if(~axis_resetn) begin
-         ifsm_state <= WRITE_STORAGE;
+         ifsm_state <= WAIT_START;
 
-         rank_in <= 0;
-         ptrs_in <= 0;
+         q_id_r <= 0;
+         update_q_size_r <= 0;
+         for (i=0; i<NUM_QUEUES; i=i+1) begin
+             q_size_r[i] <= 0; 
+         end
       end
       else begin
          ifsm_state <= ifsm_state_next;
 
-         rank_in <= rank_in_next;
-         ptrs_in <= ptrs_in_next;
+         q_id_r <= q_id_r_next;
+         update_q_size_r <= update_q_size_r_next;
+         for (i=0; i<NUM_QUEUES; i=i+1) begin
+             q_size_r[i] <= q_size_r_next[i]; 
+         end
       end
    end
 
@@ -334,6 +364,11 @@ module simple_tm_sl_drop
            storage_ptr_in_tvalid = 0;
        end
    end // always @ (*)
+
+// debugging signals
+wire [Q_SIZE_BITS-1:0] q_size_0 = q_size_r[0];
+wire [Q_SIZE_BITS-1:0] q_size_1 = q_size_r[1];
+
 
 `ifdef COCOTB_SIM
 initial begin
