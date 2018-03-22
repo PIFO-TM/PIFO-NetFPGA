@@ -4,9 +4,9 @@ module det_skip_list
 #(
 	parameter L2_MAX_SIZE = 5,
 	parameter RANK_WIDTH = 10,
-       parameter META_WIDTH = 20,
-       parameter HSP_WIDTH = META_WIDTH/2,
-       parameter MDP_WIDTH = META_WIDTH/2,
+        parameter META_WIDTH = 20,
+        parameter HSP_WIDTH = META_WIDTH/2,
+        parameter MDP_WIDTH = META_WIDTH/2,
     parameter L2_REG_WIDTH = 2,
 	parameter ENQ_FIFO_DEPTH = 16
 )
@@ -25,15 +25,15 @@ module det_skip_list
 	output full
 );
 
-    function integer log2;
-       input integer number;
-       begin
-          log2=0;
-          while(2**log2<number) begin
-             log2=log2+1;
-          end
-       end
-    endfunction // log2
+     function integer log2;
+        input integer number;
+        begin
+           log2=0;
+           while(2**log2<number) begin
+              log2=log2+1;
+           end
+        end
+     endfunction // log2
 
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
 	localparam REG_WIDTH = 2**L2_REG_WIDTH;
@@ -443,7 +443,7 @@ module det_skip_list
 			insert_ltch <= insert;
 			
 		    case (main_state)
-			INIT_HEAD:
+			INIT_HEAD: // 0
 			begin
 			    head[lvl_cntr] <= node_cntr;
 				rank_waddr <= node_cntr;
@@ -481,7 +481,7 @@ module det_skip_list
 				main_state <= INIT_TAIL;
 			end
 			
-			INIT_TAIL:
+			INIT_TAIL: // 1
 			begin
 			    tail[lvl_cntr] <= node_cntr;
 				rank_waddr <= node_cntr;
@@ -525,7 +525,7 @@ module det_skip_list
 				    main_state <= INIT_FREE_LIST;
 			end
 			
-			INIT_FREE_LIST:
+			INIT_FREE_LIST: // 2
 			begin
                 // Push all free nodes in free list FIFO
                 free_list_din <= node_cntr;
@@ -539,7 +539,7 @@ module det_skip_list
                     node_cntr <= node_cntr + 1;
 			end  
 			
-			RUN:
+			RUN:  // 3
 				if (remove == 1'b1 && num_entries > 0)
 					main_state <= REMOVE;
 				else if (insert == 1'b1 && num_entries < MAX_SIZE)
@@ -598,7 +598,7 @@ module det_skip_list
 						main_state <= INSERT;
 					end
 			
-			REMOVE:
+			REMOVE: // 4
 			    if (sl_valid_out == 1'b1)
 				begin
 				    if (insert == 1'b1 || insert_ltch == 1'b1)
@@ -608,6 +608,7 @@ module det_skip_list
 							    pr_rank_in <= rank_in;
 								pr_meta_in <= meta_in;
 					            pr_insert <= 1'b1;
+								main_state <= RUN;
 							end
 					        else
                             begin						
@@ -660,7 +661,7 @@ module det_skip_list
 					    main_state <= RUN;
 				end		
 				
-			INSERT:
+			INSERT: // 5
 			    if (insert_done == 1'b1)
 				begin
 					num_entries <= num_entries + 1;
