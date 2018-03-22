@@ -19,9 +19,9 @@ module det_skip_list
 	input [HSP_WIDTH+MDP_WIDTH-1:0] meta_in,
 	output [RANK_WIDTH-1:0] rank_out,
 	output [HSP_WIDTH+MDP_WIDTH-1:0] meta_out,
-	output valid_out,
         output reg [L2_MAX_SIZE-1:0] num_entries,
-        output reg busy,
+	output valid_out,
+	output reg busy,
 	output full
 );
 
@@ -551,6 +551,7 @@ module det_skip_list
 					        pr_insert <= 1'b1;
 						end
 					    else
+ 						// No need to check for free nodes because num_entries = 0
                         begin						
 					        if (rank_in < pr_max_rank)
 						    begin
@@ -590,9 +591,18 @@ module det_skip_list
 							end
 						else
 						begin
-							sl_rank_in <= rank_in;
-							sl_meta_in <= meta_in;
-						    sl_insert <= 1'b1;
+							if ((pr_empty != 1'b1) && (rank_in < pr_max_rank))
+						    begin
+							    pr_rank_in <= rank_in;
+								pr_meta_in <= meta_in;
+					            pr_insert <= 1'b1;
+							end
+							else
+							begin
+							    sl_rank_in <= rank_in;
+							    sl_meta_in <= meta_in;
+						        sl_insert <= 1'b1;
+							end
 						end
 						busy <= 1'b1;
 						main_state <= INSERT;
@@ -610,7 +620,8 @@ module det_skip_list
 					            pr_insert <= 1'b1;
 								main_state <= RUN;
 							end
-					        else
+					        else 
+							// No need to check for free nodes because num_entries = 0
                             begin						
 					            if (rank_in < pr_max_rank)
 						        begin
@@ -650,13 +661,24 @@ module det_skip_list
 								end
 						    else
 							begin
-							    sl_rank_in <= pr_max_rank;
-								sl_meta_in <= pr_max_meta;
-						        sl_insert <= 1'b1;
-							end
-						    busy <= 1'b1;
-						    main_state <= INSERT;
+							    if ((pr_empty != 1'b1) && (rank_in < pr_max_rank))
+						        begin
+							        pr_rank_in <= rank_in;
+							    	pr_meta_in <= meta_in;
+					                pr_insert <= 1'b1;
+							    end
+							    else
+							    begin
+							        sl_rank_in <= rank_in;
+							        sl_meta_in <= meta_in;
+						            sl_insert <= 1'b1;
+							    end
+						        busy <= 1'b1;
+						        main_state <= INSERT;
+						    end
 						end
+						else
+						    main_state <= RUN;
 					else
 					    main_state <= RUN;
 				end		
@@ -928,8 +950,8 @@ module det_skip_list
 			
 			// Remove from skip list
 			case(remove_state)
-			RMV_IDLE:
-			    if (pr_full == 1'b0 && num_entries > 0 && busy == 1'b0)
+			RMV_IDLE: // 0
+			    if (pr_full == 1'b0 && num_entries > 0 && busy == 1'b0 && insert == 1'b0)
 				begin
 				    lptr_raddr <= tail[0];
 					bram_rd <= 1'b1;
@@ -939,11 +961,11 @@ module det_skip_list
 					remove_state <= RMV_WAIT_MEM_RD1;
 				end
 				
-			RMV_WAIT_MEM_RD1:
+			RMV_WAIT_MEM_RD1: // 1
 			    if (bram_rd1 == 1'b1)
 				    remove_state <= RD_DEQ_NODE;
 					
-            RD_DEQ_NODE:
+            RD_DEQ_NODE: // 2
 			begin
                 rank_raddr <= lptr_dout;
 				hsp_raddr <= lptr_dout;
@@ -955,11 +977,11 @@ module det_skip_list
 				remove_state <= RMV_WAIT_MEM_RD2;
 			end
 
-            RMV_WAIT_MEM_RD2:
+            RMV_WAIT_MEM_RD2: // 3
                 if (bram_rd1 == 1'b1)
                     remove_state <= RMV_DEQ_NODE;
 					
-			RMV_DEQ_NODE:
+			RMV_DEQ_NODE: // 4
 			begin
 			    // Send node to PIFO reg
 			    pr_rank_in <= rank_dout;
@@ -1002,11 +1024,11 @@ module det_skip_list
 				end
 			end
 			
-			RMV_WAIT_MEM_RD3:
+			RMV_WAIT_MEM_RD3: // 5
 			    if (bram_rd1 == 1'b1)
 				    remove_state <= RMV_CONN_LEFT_TAIL;			
 				
-			RMV_CONN_LEFT_TAIL:
+			RMV_CONN_LEFT_TAIL: // 6
 			begin
 				// Connect left neighbor to tail
 			    rptr_waddr <= lptr_dout;
