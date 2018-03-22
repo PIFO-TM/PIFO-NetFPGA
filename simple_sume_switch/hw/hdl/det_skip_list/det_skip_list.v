@@ -39,6 +39,7 @@ module det_skip_list
 	localparam REG_WIDTH = 2**L2_REG_WIDTH;
         localparam NUM_LVLS = L2_MAX_SIZE;
         localparam L2_NUM_LVLS = log2(NUM_LVLS) + 1;
+
     localparam MAX_CONS_NODES = 3;
 //	localparam META_WIDTH = HSP_WIDTH + MDP_WIDTH;
 	
@@ -574,6 +575,7 @@ module det_skip_list
 					else if (free_nodes_avail == 1'b1)
 					begin
 					    if (pr_full == 1'b1)
+						begin
 					        if (rank_in < pr_max_rank)
 						    begin
 							    sl_rank_in <= pr_max_rank;
@@ -589,6 +591,9 @@ module det_skip_list
 								sl_meta_in <= meta_in;
 					            sl_insert <= 1'b1;
 							end
+							busy <= 1'b1;
+						    main_state <= INSERT;
+						end
 						else
 						begin
 							if ((pr_empty != 1'b1) && (rank_in < pr_max_rank))
@@ -602,10 +607,10 @@ module det_skip_list
 							    sl_rank_in <= rank_in;
 							    sl_meta_in <= meta_in;
 						        sl_insert <= 1'b1;
+						        busy <= 1'b1;
+						        main_state <= INSERT;
 							end
 						end
-						busy <= 1'b1;
-						main_state <= INSERT;
 					end
 			
 			REMOVE: // 4
@@ -644,6 +649,7 @@ module det_skip_list
 					    else if (free_nodes_avail == 1'b1)
 					    begin
 					        if (pr_full == 1'b1)
+							begin
 					            if (rank_in < pr_max_rank)
 						        begin
 							        sl_rank_in <= pr_max_rank;
@@ -659,6 +665,9 @@ module det_skip_list
 									sl_meta_in <= pr_max_meta;
 					                sl_insert <= 1'b1;
 								end
+								busy <= 1'b1;
+						        main_state <= INSERT;
+							end
 						    else
 							begin
 							    if ((pr_empty != 1'b1) && (rank_in < pr_max_rank))
@@ -666,15 +675,16 @@ module det_skip_list
 							        pr_rank_in <= rank_in;
 							    	pr_meta_in <= meta_in;
 					                pr_insert <= 1'b1;
+									main_state <= RUN;
 							    end
 							    else
 							    begin
 							        sl_rank_in <= rank_in;
 							        sl_meta_in <= meta_in;
 						            sl_insert <= 1'b1;
+						            busy <= 1'b1;
+						            main_state <= INSERT;
 							    end
-						        busy <= 1'b1;
-						        main_state <= INSERT;
 						    end
 						end
 						else
