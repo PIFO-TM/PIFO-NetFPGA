@@ -21,7 +21,7 @@ module det_skip_list
 	output [HSP_WIDTH+MDP_WIDTH-1:0] meta_out,
         output reg [L2_MAX_SIZE-1:0] num_entries,
 	output valid_out,
-	output reg busy,
+	output busy,
 	output full
 );
 
@@ -39,7 +39,6 @@ module det_skip_list
 	localparam REG_WIDTH = 2**L2_REG_WIDTH;
         localparam NUM_LVLS = L2_MAX_SIZE;
         localparam L2_NUM_LVLS = log2(NUM_LVLS) + 1;
-
     localparam MAX_CONS_NODES = 3;
 //	localparam META_WIDTH = HSP_WIDTH + MDP_WIDTH;
 	
@@ -69,12 +68,13 @@ module det_skip_list
 			   
 	// Remove state
 	localparam RMV_IDLE           = 3'b000,
-	           RMV_WAIT_MEM_RD1   = 3'b001,
-			   RD_DEQ_NODE        = 3'b010,
-			   RMV_WAIT_MEM_RD2   = 3'b011,
-	           RMV_DEQ_NODE       = 3'b100,
-               RMV_WAIT_MEM_RD3   = 3'b101,
-               RMV_CONN_LEFT_TAIL = 3'b110;			   
+	           RMV_CHK_BUSY       = 3'b001,
+	           RMV_WAIT_MEM_RD1   = 3'b010,
+			   RD_DEQ_NODE        = 3'b011,
+			   RMV_WAIT_MEM_RD2   = 3'b100,
+	           RMV_DEQ_NODE       = 3'b101,
+               RMV_WAIT_MEM_RD3   = 3'b110,
+               RMV_CONN_LEFT_TAIL = 3'b111;			   
 	
 	localparam MIN_RANK = {RANK_WIDTH{1'b0}};
 	localparam MAX_RANK = {RANK_WIDTH{1'b1}};
@@ -86,6 +86,9 @@ module det_skip_list
 	reg remove_ltch;
 	reg pr_insert;
 	reg sl_insert;
+	reg init_busy;
+	reg ins_busy;
+	reg rmv_busy;
 	reg [RANK_WIDTH-1:0] pr_rank_in;
 	reg [META_WIDTH-1:0] pr_meta_in;
 	reg [RANK_WIDTH-1:0] sl_rank_in;
@@ -106,8 +109,8 @@ module det_skip_list
 	reg [RANK_WIDTH-1:0] lVal;
 	reg [2:0] main_state;
 	reg [3:0] search_state;
-	reg [1:0] insert_state;
-	reg [2:0] remove_state;
+	reg [1:0] ins_state;
+	reg [2:0] rmv_state;
 	reg [L2_NUM_LVLS-1:0] lvl_cntr;
 	reg [L2_MAX_SIZE-1:0] node_cntr;
 //	reg [L2_MAX_SIZE-1:0] num_entries;
@@ -391,16 +394,18 @@ module det_skip_list
 	    if (rst)
 		begin
 			main_state <= INIT_HEAD;
-			insert_state <= INS_IDLE;
+			ins_state <= INS_IDLE;
 			search_state <= SRCH_IDLE;
-			remove_state <= RMV_IDLE;
+			rmv_state <= RMV_IDLE;
 			lvl_cntr <= {L2_NUM_LVLS{1'b0}};
 			node_cntr <= {L2_MAX_SIZE{1'b0}};
 			free_list_wr <= 1'b0;
 			pr_insert <= 1'b0;
 			sl_insert <= 1'b0;
 			sl_valid_out <= 1'b0;
-			busy <= 1'b1;
+			init_busy <= 1'b1;
+			ins_busy <= 1'b0;
+			rmv_busy <= 1'b0;
 			num_entries <= 0;
             currMaxLevel <= 0;
 			rank_wr <= 1'b0;
@@ -534,7 +539,7 @@ module det_skip_list
 				if (node_cntr == MAX_SIZE - 2)
 				begin
 				    main_state <= RUN;
-					busy <= 1'b0;
+					init_busy <= 1'b0;
 				end
 				else
                     node_cntr <= node_cntr + 1;
@@ -569,7 +574,7 @@ module det_skip_list
 								sl_meta_in <= meta_in;
 					            sl_insert <= 1'b1;
 							end
-							busy <= 1'b1;
+							ins_busy <= 1'b1;
 					        main_state <= INSERT;
 						end
 					else if (free_nodes_avail == 1'b1)
@@ -591,7 +596,7 @@ module det_skip_list
 								sl_meta_in <= meta_in;
 					            sl_insert <= 1'b1;
 							end
-							busy <= 1'b1;
+							ins_busy <= 1'b1;
 						    main_state <= INSERT;
 						end
 						else
@@ -607,7 +612,7 @@ module det_skip_list
 							    sl_rank_in <= rank_in;
 							    sl_meta_in <= meta_in;
 						        sl_insert <= 1'b1;
-						        busy <= 1'b1;
+						        ins_busy <= 1'b1;
 						        main_state <= INSERT;
 							end
 						end
@@ -643,7 +648,7 @@ module det_skip_list
 									sl_meta_in <= pr_max_meta;
 					                sl_insert <= 1'b1;
 								end
-							    busy <= 1'b1;
+							    ins_busy <= 1'b1;
 					            main_state <= INSERT;
 						    end
 					    else if (free_nodes_avail == 1'b1)
@@ -665,7 +670,7 @@ module det_skip_list
 									sl_meta_in <= pr_max_meta;
 					                sl_insert <= 1'b1;
 								end
-								busy <= 1'b1;
+								ins_busy <= 1'b1;
 						        main_state <= INSERT;
 							end
 						    else
@@ -682,7 +687,7 @@ module det_skip_list
 							        sl_rank_in <= rank_in;
 							        sl_meta_in <= meta_in;
 						            sl_insert <= 1'b1;
-						            busy <= 1'b1;
+						            ins_busy <= 1'b1;
 						            main_state <= INSERT;
 							    end
 						    end
@@ -894,16 +899,19 @@ module det_skip_list
             endcase
 
             // Skip List Insert state machine 
-		    case(insert_state)
+		    case(ins_state)
             INS_IDLE: 
+			begin
+			    ins_busy <= 1'b0;
 		        if (sl_insert == 1'b1)
 				begin
-				    busy <= 1'b1;
+				    ins_busy <= 1'b1;
 			        start_search <= 1'b1;
 				    search_rank <= sl_rank_in;
-					insert_state <= INS_CONN_NEW;
+					ins_state <= INS_CONN_NEW;
 				end
-				
+			end
+			
 			INS_CONN_NEW:
 				if (search_done == 1'b1)
 				begin
@@ -931,7 +939,7 @@ module det_skip_list
 					uptr_wr <= 1'b1;
 				    insert_done <= 1'b1;
 				
-				    insert_state <= INS_CONN_NEAR;
+				    ins_state <= INS_CONN_NEAR;
                 end
 				
 			INS_CONN_NEAR:
@@ -948,34 +956,46 @@ module det_skip_list
 				
 				// Request next node
                 get_next_node <= 1'b1;
-				busy <= 1'b0;
+				//busy <= 1'b0;
 				
-				insert_state <= INS_IDLE;
+				ins_state <= INS_IDLE;
 			end
 			
 			default:
-			    insert_state <= INS_IDLE;
+			    ins_state <= INS_IDLE;
 				
 		    endcase
 			
 			// Remove from skip list
-			case(remove_state)
+			case(rmv_state)
 			RMV_IDLE: // 0
-			    if (pr_full == 1'b0 && num_entries > 0 && busy == 1'b0 && insert == 1'b0)
+			begin
+			    rmv_busy <= 1'b0;
+			    if (pr_full == 1'b0 && num_entries > 0 && ins_busy == 1'b0 && insert == 1'b0)
+				begin
+					rmv_busy <= 1'b1;
+					rmv_state <= RMV_CHK_BUSY;
+				end
+			end
+			
+			RMV_CHK_BUSY: // 1
+			    // Check to make sure an Insert operation did not start simultaneously
+			    if (ins_busy == 1'b0 && insert == 1'b0)
 				begin
 				    lptr_raddr <= tail[0];
 					bram_rd <= 1'b1;
 				    num_entries <= num_entries - 1;
-					busy <= 1'b1;
-					
-					remove_state <= RMV_WAIT_MEM_RD1;
+					rmv_state <= RMV_WAIT_MEM_RD1;
 				end
-				
-			RMV_WAIT_MEM_RD1: // 1
+				else
+				    // Could not get busy semaphore, go back to RMV_IDLE
+					rmv_state <= RMV_IDLE;
+			
+			RMV_WAIT_MEM_RD1: // 2
 			    if (bram_rd1 == 1'b1)
-				    remove_state <= RD_DEQ_NODE;
+				    rmv_state <= RD_DEQ_NODE;
 					
-            RD_DEQ_NODE: // 2
+            RD_DEQ_NODE: // 3
 			begin
                 rank_raddr <= lptr_dout;
 				hsp_raddr <= lptr_dout;
@@ -984,14 +1004,14 @@ module det_skip_list
 				uptr_raddr <= lptr_dout;
 				deq_node <= lptr_dout;
 				bram_rd <= 1'b1;
-				remove_state <= RMV_WAIT_MEM_RD2;
+				rmv_state <= RMV_WAIT_MEM_RD2;
 			end
 
-            RMV_WAIT_MEM_RD2: // 3
+            RMV_WAIT_MEM_RD2: // 4
                 if (bram_rd1 == 1'b1)
-                    remove_state <= RMV_DEQ_NODE;
+                    rmv_state <= RMV_DEQ_NODE;
 					
-			RMV_DEQ_NODE: // 4
+			RMV_DEQ_NODE: // 5
 			begin
 			    // Send node to PIFO reg
 			    pr_rank_in <= rank_dout;
@@ -1025,20 +1045,20 @@ module det_skip_list
 				    bram_rd <= 1'b1;
 					rmv_node <= uptr_dout;
 					rmv_lvl <= 1;
-				    remove_state <= RMV_WAIT_MEM_RD3;
+				    rmv_state <= RMV_WAIT_MEM_RD3;
 				end
 				else
 				begin
-				    busy <= 1'b0;
-				    remove_state <= RMV_IDLE;
+				    //busy <= 1'b0;
+				    rmv_state <= RMV_IDLE;
 				end
 			end
 			
-			RMV_WAIT_MEM_RD3: // 5
+			RMV_WAIT_MEM_RD3: // 6
 			    if (bram_rd1 == 1'b1)
-				    remove_state <= RMV_CONN_LEFT_TAIL;			
+				    rmv_state <= RMV_CONN_LEFT_TAIL;			
 				
-			RMV_CONN_LEFT_TAIL: // 6
+			RMV_CONN_LEFT_TAIL: // 7
 			begin
 				// Connect left neighbor to tail
 			    rptr_waddr <= lptr_dout;
@@ -1064,22 +1084,25 @@ module det_skip_list
 				    bram_rd <= 1'b1;
 					rmv_node <= uptr_dout;
 					rmv_lvl <= rmv_lvl + 1;
-					remove_state <= RMV_WAIT_MEM_RD3;
+					rmv_state <= RMV_WAIT_MEM_RD3;
 				end
 				else
 				begin
 				    if (rptr_dout == tail[rmv_lvl] && lptr_dout == head[rmv_lvl])
 					    currMaxLevel <= currMaxLevel - 1;
-				    busy <= 1'b0;
-				    remove_state <= RMV_IDLE;
+
+				    rmv_state <= RMV_IDLE;
 				end
 			end
 			
 			default:
-			    remove_state <= RMV_IDLE;
+			    rmv_state <= RMV_IDLE;
 			endcase
 		end
 	end
+	
+	assign busy = init_busy | ins_busy | rmv_busy;
+	
 endmodule
 	
 
