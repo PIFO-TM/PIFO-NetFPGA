@@ -7,8 +7,7 @@ module det_skip_list
         parameter META_WIDTH = 20,
         parameter HSP_WIDTH = META_WIDTH/2,
         parameter MDP_WIDTH = META_WIDTH/2,
-    parameter L2_REG_WIDTH = 2,
-	parameter ENQ_FIFO_DEPTH = 16
+    parameter L2_REG_WIDTH = 2
 )
 (
     input rst,
@@ -971,7 +970,7 @@ module det_skip_list
 			RMV_IDLE: // 0
 			begin
 			    rmv_busy <= 1'b0;
-			    if (pr_full == 1'b0 && num_entries > 0 && ins_busy == 1'b0 && insert == 1'b0)
+			    if (pr_full == 1'b0 && num_entries > 0 && busy == 1'b0 && insert == 1'b0)
 				begin
 					rmv_busy <= 1'b1;
 					rmv_state <= RMV_CHK_BUSY;
