@@ -43,7 +43,7 @@
  * 		
  *  Description:
  *        This is the top-level module that ties together the skiplist(s) and packet
- *        storage. This version asserts bacl pressure rather than drops packets
+ *        storage. This version asserts back pressure rather than dropping packets
  *
  */
 
@@ -187,14 +187,14 @@ module simple_tm_sl_bp
    );
 
     /* PIFO to store rank values and pointers */ 
-    det_skip_list
-//    pifo_top
+//    det_skip_list
+    pifo_top
     #(
      .L2_MAX_SIZE(log2(PIFO_DEPTH)),
      .RANK_WIDTH(RANK_WIDTH),
      .META_WIDTH(PTRS_WIDTH),
-     .L2_REG_WIDTH(log2(PIFO_REG_DEPTH))
-//     .NUM_SKIP_LISTS(NUM_SKIP_LISTS)
+     .L2_REG_WIDTH(log2(PIFO_REG_DEPTH)),
+     .NUM_SKIP_LISTS(NUM_SKIP_LISTS)
     )
     pifo_inst
     (
