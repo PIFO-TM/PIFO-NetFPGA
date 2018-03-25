@@ -88,6 +88,7 @@ module det_skip_list
 	reg init_busy;
 	reg ins_busy;
 	reg rmv_busy;
+	wire int_busy;
 	reg [RANK_WIDTH-1:0] pr_rank_in;
 	reg [META_WIDTH-1:0] pr_meta_in;
 	reg [RANK_WIDTH-1:0] sl_rank_in;
@@ -545,9 +546,10 @@ module det_skip_list
 			end  
 			
 			RUN:  // 3
-				if (remove == 1'b1 && num_entries > 0)
-					main_state <= REMOVE;
-				else if (insert == 1'b1 && num_entries < MAX_SIZE)
+			//	if (remove == 1'b1 && num_entries > 0)
+			//		main_state <= REMOVE;
+			//	else if (insert == 1'b1 && num_entries < MAX_SIZE)
+			    if (insert == 1'b1 && num_entries < MAX_SIZE)
 				    if (num_entries == 0) 
 					    if (pr_full == 1'b0)
 						begin
@@ -617,93 +619,93 @@ module det_skip_list
 						end
 					end
 			
-			REMOVE: // 4
-			    if (sl_valid_out == 1'b1)
-				begin
-				    if (insert == 1'b1 || insert_ltch == 1'b1)
-				        if (num_entries == 0) 
-					        if (pr_full == 1'b0)
-							begin
-							    pr_rank_in <= rank_in;
-								pr_meta_in <= meta_in;
-					            pr_insert <= 1'b1;
-								main_state <= RUN;
-							end
-					        else 
-							// No need to check for free nodes because num_entries = 0
-                            begin						
-					            if (rank_in < pr_max_rank)
-						        begin
-							        sl_rank_in <= pr_max_rank;
-									sl_meta_in <= pr_max_meta;
-							        sl_insert <= 1'b1;
-							        pr_rank_in <= rank_in;
-									pr_meta_in <= meta_in;
-					                pr_insert <= 1'b1;
-							    end
-					            else
-								begin
-							        sl_rank_in <= pr_max_rank;
-									sl_meta_in <= pr_max_meta;
-					                sl_insert <= 1'b1;
-								end
-							    ins_busy <= 1'b1;
-					            main_state <= INSERT;
-						    end
-					    else if (free_nodes_avail == 1'b1)
-					    begin
-					        if (pr_full == 1'b1)
-							begin
-					            if (rank_in < pr_max_rank)
-						        begin
-							        sl_rank_in <= pr_max_rank;
-									sl_meta_in <= pr_max_meta;
-							        sl_insert <= 1'b1;
-							        pr_rank_in <= rank_in;
-									pr_meta_in <= meta_in;
-					                pr_insert <= 1'b1;
-							    end
-					            else
-								begin
-							        sl_rank_in <= pr_max_rank;
-									sl_meta_in <= pr_max_meta;
-					                sl_insert <= 1'b1;
-								end
-								ins_busy <= 1'b1;
-						        main_state <= INSERT;
-							end
-						    else
-							begin
-							    if ((pr_empty != 1'b1) && (rank_in < pr_max_rank))
-						        begin
-							        pr_rank_in <= rank_in;
-							    	pr_meta_in <= meta_in;
-					                pr_insert <= 1'b1;
-									main_state <= RUN;
-							    end
-							    else
-							    begin
-							        sl_rank_in <= rank_in;
-							        sl_meta_in <= meta_in;
-						            sl_insert <= 1'b1;
-						            ins_busy <= 1'b1;
-						            main_state <= INSERT;
-							    end
-						    end
-						end
-						else
-						    main_state <= RUN;
-					else
-					    main_state <= RUN;
-				end		
+		//	REMOVE: // 4
+		//	    if (sl_valid_out == 1'b1)
+		//		begin
+		//		    if (insert == 1'b1 || insert_ltch == 1'b1)
+		//		        if (num_entries == 0) 
+		//			        if (pr_full == 1'b0)
+		//					begin
+		//					    pr_rank_in <= rank_in;
+		//						pr_meta_in <= meta_in;
+		//			            pr_insert <= 1'b1;
+		//						main_state <= RUN;
+		//					end
+		//			        else 
+		//					// No need to check for free nodes because num_entries = 0
+        //                    begin						
+		//			            if (rank_in < pr_max_rank)
+		//				        begin
+		//					        sl_rank_in <= pr_max_rank;
+		//							sl_meta_in <= pr_max_meta;
+		//					        sl_insert <= 1'b1;
+		//					        pr_rank_in <= rank_in;
+		//							pr_meta_in <= meta_in;
+		//			                pr_insert <= 1'b1;
+		//					    end
+		//			            else
+		//						begin
+		//					        sl_rank_in <= pr_max_rank;
+		//							sl_meta_in <= pr_max_meta;
+		//			                sl_insert <= 1'b1;
+		//						end
+		//					    ins_busy <= 1'b1;
+		//			            main_state <= INSERT;
+		//				    end
+		//			    else if (free_nodes_avail == 1'b1)
+		//			    begin
+		//			        if (pr_full == 1'b1)
+		//					begin
+		//			            if (rank_in < pr_max_rank)
+		//				        begin
+		//					        sl_rank_in <= pr_max_rank;
+		//							sl_meta_in <= pr_max_meta;
+		//					        sl_insert <= 1'b1;
+		//					        pr_rank_in <= rank_in;
+		//							pr_meta_in <= meta_in;
+		//			                pr_insert <= 1'b1;
+		//					    end
+		//			            else
+		//						begin
+		//					        sl_rank_in <= pr_max_rank;
+		//							sl_meta_in <= pr_max_meta;
+		//			                sl_insert <= 1'b1;
+		//						end
+		//						ins_busy <= 1'b1;
+		//				        main_state <= INSERT;
+		//					end
+		//				    else
+		//					begin
+		//					    if ((pr_empty != 1'b1) && (rank_in < pr_max_rank))
+		//				        begin
+		//					        pr_rank_in <= rank_in;
+		//					    	pr_meta_in <= meta_in;
+		//			                pr_insert <= 1'b1;
+		//							main_state <= RUN;
+		//					    end
+		//					    else
+		//					    begin
+		//					        sl_rank_in <= rank_in;
+		//					        sl_meta_in <= meta_in;
+		//				            sl_insert <= 1'b1;
+		//				            ins_busy <= 1'b1;
+		//				            main_state <= INSERT;
+		//					    end
+		//				    end
+		//				end
+		//				else
+		//				    main_state <= RUN;
+		//			else
+		//			    main_state <= RUN;
+		//		end		
 				
 			INSERT: // 5
 			    if (insert_done == 1'b1)
 				begin
 					num_entries <= num_entries + 1;
-					if ((remove == 1'b1 || remove_ltch == 1'b1) && num_entries > 0)
-						main_state <= REMOVE;
-					else
+				//	if ((remove == 1'b1 || remove_ltch == 1'b1) && num_entries > 0)
+				//		main_state <= REMOVE;
+				//	else
 						main_state <= RUN;
 				end
 				
@@ -970,7 +972,7 @@ module det_skip_list
 			RMV_IDLE: // 0
 			begin
 			    rmv_busy <= 1'b0;
-			    if (pr_full == 1'b0 && num_entries > 0 && busy == 1'b0 && insert == 1'b0)
+			    if (pr_full == 1'b0 && num_entries > 0 && int_busy == 1'b0 && insert == 1'b0 && pr_insert == 1'b0 && sl_insert == 1'b0)
 				begin
 					rmv_busy <= 1'b1;
 					rmv_state <= RMV_CHK_BUSY;
@@ -979,7 +981,7 @@ module det_skip_list
 			
 			RMV_CHK_BUSY: // 1
 			    // Check to make sure an Insert operation did not start simultaneously
-			    if (ins_busy == 1'b0 && insert == 1'b0)
+			    if (ins_busy == 1'b0 && insert == 1'b0 && pr_insert == 1'b0 && sl_insert == 1'b0)
 				begin
 				    lptr_raddr <= tail[0];
 					bram_rd <= 1'b1;
@@ -1047,10 +1049,7 @@ module det_skip_list
 				    rmv_state <= RMV_WAIT_MEM_RD3;
 				end
 				else
-				begin
-				    //busy <= 1'b0;
 				    rmv_state <= RMV_IDLE;
-				end
 			end
 			
 			RMV_WAIT_MEM_RD3: // 6
@@ -1100,7 +1099,11 @@ module det_skip_list
 		end
 	end
 	
-	assign busy = init_busy | ins_busy | rmv_busy;
+	// Internal busy not including condition for PIFO Reg empty AND SL not empty
+	assign int_busy = init_busy | ins_busy | rmv_busy;
+	// External busy including (PIFO Reg empty AND SL not empty) to prevent starvation of replenishment
+	// of PIFO Reg from Skip List
+	assign busy = int_busy || (pr_empty == 1'b1 && num_entries > 0) ;
 	
 endmodule
 	
