@@ -2,7 +2,7 @@
 
 module pifo_reg
 #(
-	parameter L2_MAX_SIZE = 2,
+	parameter L2_REG_WIDTH = 2,
     parameter RANK_WIDTH = 8,
 	parameter META_WIDTH = 8
 )
@@ -19,32 +19,32 @@ module pifo_reg
 	output [RANK_WIDTH-1:0] max_rank_out,
 	output [META_WIDTH-1:0] max_meta_out,
 	output reg max_valid_out,
+	output reg [L2_REG_WIDTH:0] num_entries,
 	output reg empty,
 	output reg full
 );
 
-	localparam MAX_SIZE = 2**L2_MAX_SIZE;
-	localparam COMP_LVLS = L2_MAX_SIZE+1;
+	localparam REG_WIDTH = 2**L2_REG_WIDTH;
+	localparam COMP_LVLS = L2_REG_WIDTH+1;
 
-    reg [RANK_WIDTH-1:0] rank[0:MAX_SIZE-1];
-	reg [META_WIDTH-1:0] meta[0:MAX_SIZE-1];
-	reg valid[0:MAX_SIZE-1];
-	reg [RANK_WIDTH-1:0] min_rank[0:COMP_LVLS-1][0:MAX_SIZE-1];
-	reg [META_WIDTH-1:0] min_meta[0:COMP_LVLS-1][0:MAX_SIZE-1];
-	reg [L2_MAX_SIZE-1:0] min_idx[0:COMP_LVLS-1][0:MAX_SIZE-1];
-	reg [RANK_WIDTH-1:0] max_rank[0:COMP_LVLS-1][0:MAX_SIZE-1];
-	reg [META_WIDTH-1:0] max_meta[0:COMP_LVLS-1][0:MAX_SIZE-1];
-	reg [L2_MAX_SIZE-1:0] max_idx[0:COMP_LVLS-1][0:MAX_SIZE-1];
-	reg mvalid[0:COMP_LVLS-1][0:MAX_SIZE-1];
-	wire [L2_MAX_SIZE-1:0] idx;
-	reg [L2_MAX_SIZE:0] num_entries;
+    reg [RANK_WIDTH-1:0] rank[0:REG_WIDTH-1];
+	reg [META_WIDTH-1:0] meta[0:REG_WIDTH-1];
+	reg valid[0:REG_WIDTH-1];
+	reg [RANK_WIDTH-1:0] min_rank[0:COMP_LVLS-1][0:REG_WIDTH-1];
+	reg [META_WIDTH-1:0] min_meta[0:COMP_LVLS-1][0:REG_WIDTH-1];
+	reg [L2_REG_WIDTH-1:0] min_idx[0:COMP_LVLS-1][0:REG_WIDTH-1];
+	reg [RANK_WIDTH-1:0] max_rank[0:COMP_LVLS-1][0:REG_WIDTH-1];
+	reg [META_WIDTH-1:0] max_meta[0:COMP_LVLS-1][0:REG_WIDTH-1];
+	reg [L2_REG_WIDTH-1:0] max_idx[0:COMP_LVLS-1][0:REG_WIDTH-1];
+	reg mvalid[0:COMP_LVLS-1][0:REG_WIDTH-1];
+	wire [L2_REG_WIDTH-1:0] idx;
 	reg insert_ltch;
 	reg calc_min_max;
 	integer i, j;
 	
 	always @*
 	begin
-		for (j = 0; j < MAX_SIZE; j=j+1)
+		for (j = 0; j < REG_WIDTH; j=j+1)
 	    begin
 	        min_rank[0][j] <= rank[j];
 			min_meta[0][j] <= meta[j];
@@ -56,7 +56,7 @@ module pifo_reg
 	    end
 
 		for (i = 0; i < COMP_LVLS; i=i+1)
-	        for (j = 0; j < MAX_SIZE/2**i; j=j+2) 
+	        for (j = 0; j < REG_WIDTH/2**i; j=j+2) 
 			begin
                 if (((min_rank[i][j] <= min_rank[i][j+1]) && (mvalid[i][j] == 1'b1) && (mvalid[i][j+1] == 1'b1)) ||
 				    ((mvalid[i][j] == 1'b1) && (mvalid[i][j+1] !== 1'b1)))
@@ -106,7 +106,10 @@ module pifo_reg
     always @(posedge clk)
 	begin
 	    if (rst)
+		begin
 			valid_out <= 1'b0;
+			max_valid_out <= 1'b0;
+		end
 		else
 		begin
 		    if (insert == 1'b1 || remove == 1'b1)
@@ -132,6 +135,7 @@ module pifo_reg
 		    num_entries <= 0;
 			calc_min_max <= 0;
 			insert_ltch <= 0;
+			empty <= 1'b0;
 			full <= 1'b0;
 		end
 		else 
@@ -141,7 +145,7 @@ module pifo_reg
 		    if (remove == 1'b1 && num_entries > 0)
 		    begin
 			    // Close gap 
-				for (i = 0; i < MAX_SIZE; i=i+1)
+				for (i = 0; i < REG_WIDTH; i=i+1)
 				    if (i > idx)
 					begin
 				        rank[i-1] <= rank[i];
@@ -159,12 +163,12 @@ module pifo_reg
 		    else if (insert == 1'b1 || insert_ltch == 1'b1)
 		    begin
 			    // Insert new value at end of register
-				if (num_entries < MAX_SIZE)
+				if (num_entries < REG_WIDTH)
 				begin
 		            rank[num_entries] <= rank_in;
 			        meta[num_entries] <= meta_in;
 				    valid[num_entries] <= 1;
-					if (num_entries == MAX_SIZE-1)
+					if (num_entries == REG_WIDTH-1)
 					    full <= 1'b1;
 					else
 					    full <= 1'b0;
@@ -187,11 +191,5 @@ module pifo_reg
 			end
 		end
 	end
-
-//    initial begin
-//      $dumpfile ("pifo_reg_waveform.vcd");
-//      $dumpvars (0,pifo_reg);
-//      #1 $display("Sim running...");
-//    end
 	
 endmodule
