@@ -22,6 +22,16 @@ module det_skip_list
 	output full
 );
 
+   function integer log2;
+      input integer number;
+      begin
+         log2=0;
+         while(2**log2<number) begin
+            log2=log2+1;
+         end
+      end
+   endfunction // log2
+
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
 	localparam REG_WIDTH = 2**L2_REG_WIDTH;
         localparam NUM_LVLS = L2_MAX_SIZE;
