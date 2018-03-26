@@ -22,22 +22,21 @@ module det_skip_list
 	output full
 );
 
-   function integer log2;
-      input integer number;
-      begin
-         log2=0;
-         while(2**log2<number) begin
-            log2=log2+1;
-         end
-      end
-   endfunction // log2
-
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
 	localparam REG_WIDTH = 2**L2_REG_WIDTH;
-        localparam NUM_LVLS = L2_MAX_SIZE;
-        localparam L2_NUM_LVLS = log2(NUM_LVLS) + 1;
+    localparam NUM_LVLS = L2_MAX_SIZE;
+    localparam L2_NUM_LVLS = log2(NUM_LVLS) + 1;
     localparam MAX_CONS_NODES = 3;
-	
+	function integer log2;
+    input integer number;
+    begin
+        log2=0;
+        while(2**log2<number) begin
+            log2=log2+1;
+        end
+    end
+    endfunction // log2
+
 	// Main state
     localparam INIT_HEAD      = 3'b000, 
 	           INIT_TAIL      = 3'b001, 
@@ -100,6 +99,8 @@ module det_skip_list
 	reg [L2_MAX_SIZE-1:0] dR;
 	reg [L2_MAX_SIZE-1:0] dD;
 	reg [L2_MAX_SIZE-1:0] lptr_tail;
+	reg [L2_MAX_SIZE-1:0] rptr_head [0:NUM_LVLS-1];
+	reg [L2_MAX_SIZE-1:0] dptr_head [0:NUM_LVLS-1];
 	wire [L2_MAX_SIZE-1:0] new_node;
 	reg [RANK_WIDTH-1:0] lVal;
 	reg [2:0] main_state;
@@ -170,6 +171,8 @@ module det_skip_list
 	reg [L2_MAX_SIZE-1:0] deq_node;
 	reg [L2_MAX_SIZE-1:0] rmv_node;
 	wire free_nodes_avail;
+	reg first_node;
+	
 
 	assign rank_rd = 1'b1;
 	
@@ -393,6 +396,7 @@ module det_skip_list
 			insert_done <= 1'b0;
 			get_next_node <= 1'b0;
 			store_d <= 1'b0;
+			first_node <= 1'b0;
 			
 		end
 		else
@@ -413,6 +417,7 @@ module det_skip_list
 			insert_done <= 1'b0;
 			search_done <= 1'b0;
 			get_next_node <= 1'b0;
+			first_node <= 1'b0;
 			
 			bram_rd1 <= bram_rd;
 			
@@ -432,6 +437,7 @@ module det_skip_list
 				rptr_waddr <= node_cntr;
 				rptr_din <= node_cntr + 1;
 				rptr_wr <= 1'b1;
+			rptr_head[lvl_cntr] <= node_cntr + 1;
 				lptr_waddr <= node_cntr;
 				lptr_din <= {L2_MAX_SIZE{1'b1}};
 				lptr_wr <= 1'b1;
@@ -441,6 +447,7 @@ module det_skip_list
 					dptr_waddr <= node_cntr;
 					dptr_din <= node_cntr - 2;
 					dptr_wr <= 1'b1;
+				dptr_head[lvl_cntr] <= node_cntr - 2;
 				end
 				if (lvl_cntr < NUM_LVLS - 1)
 				begin
@@ -597,7 +604,13 @@ module det_skip_list
                     level <= curr_max_lvl;
                     n <= head[curr_max_lvl];
                     u <= head[curr_max_lvl + 1];
-                    search_state <= GO_DOWN;
+				d <= head[curr_max_lvl];
+                //    search_state <= GO_DOWN;
+				cons_nodes <= 0;
+
+				first_node <= 1'b1;
+                search_state <= GO_RIGHT1;
+					
                 end
 			
             GO_DOWN: // 1
@@ -626,6 +639,31 @@ module det_skip_list
 			
             GO_RIGHT1: // 3
 			begin
+			if (first_node == 1'b1)
+			begin
+
+				    dR <= rptr_head[curr_max_lvl];
+					dD <= dptr_head[curr_max_lvl];
+					//store_d = 1'b0;
+
+                    // Store current node in l
+                    l <= n;
+					lVal <= MAX_RANK;
+                    // Move right
+                    n <= rptr_head[curr_max_lvl];
+					// Read node n
+					rank_raddr <= rptr_head[curr_max_lvl];
+					lvl_raddr <= rptr_head[curr_max_lvl];
+					rptr_raddr <= rptr_head[curr_max_lvl];
+                    uptr_raddr <= rptr_head[curr_max_lvl];
+					dptr_raddr <= rptr_head[curr_max_lvl];
+					bram_rd <= 1'b1;
+					search_state <= WAIT_MEM_RD2;
+			
+			end
+			else
+			begin
+			
 				if (store_d == 1'b1)
 				begin
 				    dR <= rptr_dout;
@@ -655,6 +693,7 @@ module det_skip_list
                     level <= level - 1;
 					search_state <= GO_DOWN;
 				end
+			end
 			end
 			
 			WAIT_MEM_RD2: // 4
@@ -732,7 +771,8 @@ module det_skip_list
 				dptr_waddr <= new_node;
 				dptr_din <= l;
 				dptr_wr <= 1'b1;
-
+			if (new_node == head[level+1])
+                dptr_head[level+1] <= new_node;
 				search_state <= SRCH_CONN_NEAR;
             end
 			
@@ -747,6 +787,9 @@ module det_skip_list
 				rptr_waddr <= u;
 				rptr_din <= new_node;
 				rptr_wr <= 1'b1;
+			if (u == head[level+1])
+			    rptr_head[level+1] <= new_node;
+			    
 				
                 // Connect node below to new node
 				uptr_waddr <= l;
@@ -829,6 +872,8 @@ module det_skip_list
 				rptr_waddr <= d;
 				rptr_din <= new_node;
 				rptr_wr <= 1'b1;				    
+			if (d == head[0])
+			    rptr_head[0] <= new_node;
 				
 				// Request next node
                 get_next_node <= 1'b1;
@@ -991,7 +1036,3 @@ module det_skip_list
 	assign num_entries = {{(L2_MAX_SIZE-L2_REG_WIDTH){1'b0}}, pr_num_entries} + sl_num_entries;
 	
 endmodule
-	
-
-
-
