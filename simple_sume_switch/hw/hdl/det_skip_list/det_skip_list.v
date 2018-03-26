@@ -4,7 +4,9 @@ module det_skip_list
 #(
 	parameter L2_MAX_SIZE = 5,
 	parameter RANK_WIDTH = 10,
-	parameter META_WIDTH = 10,
+        parameter META_WIDTH = 20,
+        parameter HSP_WIDTH = META_WIDTH/2,
+        parameter MDP_WIDTH = META_WIDTH/2,
     parameter L2_REG_WIDTH = 2
 )
 (
@@ -13,27 +15,39 @@ module det_skip_list
     input insert,
     input remove,
 	input [RANK_WIDTH-1:0] rank_in,
-	input [META_WIDTH-1:0] meta_in,
+	input [HSP_WIDTH+MDP_WIDTH-1:0] meta_in,
 	output [RANK_WIDTH-1:0] rank_out,
-	output [META_WIDTH-1:0] meta_out,
+	output [HSP_WIDTH+MDP_WIDTH-1:0] meta_out,
+        output reg [L2_MAX_SIZE-1:0] num_entries,
 	output valid_out,
-    output [L2_MAX_SIZE:0] num_entries,
 	output busy,
 	output full
 );
 
+     function integer log2;
+        input integer number;
+        begin
+           log2=0;
+           while(2**log2<number) begin
+              log2=log2+1;
+           end
+        end
+     endfunction // log2
+
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
 	localparam REG_WIDTH = 2**L2_REG_WIDTH;
-    localparam L2_NUM_LVLS = 3;
-	localparam NUM_LVLS = 5;
+        localparam NUM_LVLS = L2_MAX_SIZE;
+        localparam L2_NUM_LVLS = log2(NUM_LVLS) + 1;
     localparam MAX_CONS_NODES = 3;
+//	localparam META_WIDTH = HSP_WIDTH + MDP_WIDTH;
 	
 	// Main state
     localparam INIT_HEAD      = 3'b000, 
 	           INIT_TAIL      = 3'b001, 
 			   INIT_FREE_LIST = 3'b010, 
 			   RUN            = 3'b011,
-			   INSERT         = 3'b100;
+			   REMOVE         = 3'b100,
+			   INSERT         = 3'b101;
 
     // Search state
     localparam SRCH_IDLE      = 4'b0000, 
@@ -67,6 +81,8 @@ module det_skip_list
 	reg free_list_wr;
 	reg [L2_MAX_SIZE-1:0] free_list_din;
     reg start_search;
+	reg insert_ltch;
+	reg remove_ltch;
 	reg pr_insert;
 	reg sl_insert;
 	reg init_busy;
@@ -79,7 +95,7 @@ module det_skip_list
 	reg [META_WIDTH-1:0] sl_meta_in;
 	reg sl_valid_out;
 	reg [RANK_WIDTH-1:0] search_rank;
-    reg [L2_NUM_LVLS-1:0] curr_max_lvl;
+    reg [L2_NUM_LVLS-1:0] currMaxLevel;
 	reg [L2_MAX_SIZE-1:0] head [0:NUM_LVLS-1];
 	reg [L2_MAX_SIZE-1:0] tail [0:NUM_LVLS-1];
     reg [L2_MAX_SIZE-1:0] n;
@@ -89,7 +105,6 @@ module det_skip_list
     reg [L2_MAX_SIZE-1:0] uR;
 	reg [L2_MAX_SIZE-1:0] dR;
 	reg [L2_MAX_SIZE-1:0] dD;
-	reg [L2_MAX_SIZE-1:0] lptr_tail;
 	wire [L2_MAX_SIZE-1:0] new_node;
 	reg [RANK_WIDTH-1:0] lVal;
 	reg [2:0] main_state;
@@ -98,20 +113,25 @@ module det_skip_list
 	reg [2:0] rmv_state;
 	reg [L2_NUM_LVLS-1:0] lvl_cntr;
 	reg [L2_MAX_SIZE-1:0] node_cntr;
-	reg [L2_MAX_SIZE:0] sl_num_entries;
-	wire [L2_REG_WIDTH:0] pr_num_entries;
+//	reg [L2_MAX_SIZE-1:0] num_entries;
 	reg [L2_MAX_SIZE-1:0] rank_raddr;
 	reg [L2_MAX_SIZE-1:0] rank_waddr;
 	reg [RANK_WIDTH-1:0] rank_din;
 	wire [RANK_WIDTH-1:0] rank_dout;
 	wire rank_rd;
 	reg rank_wr;
-	reg [L2_MAX_SIZE-1:0] meta_raddr;
-	reg [L2_MAX_SIZE-1:0] meta_waddr;
-	reg [META_WIDTH-1:0] meta_din;
-	wire [META_WIDTH-1:0] meta_dout;
-	wire meta_rd;
-	reg meta_wr;
+	reg [L2_MAX_SIZE-1:0] hsp_raddr;
+	reg [L2_MAX_SIZE-1:0] hsp_waddr;
+	reg [HSP_WIDTH-1:0] hsp_din;
+	wire [HSP_WIDTH-1:0] hsp_dout;
+	wire hsp_rd;
+	reg hsp_wr;
+	reg [L2_MAX_SIZE-1:0] mdp_raddr;
+	reg [L2_MAX_SIZE-1:0] mdp_waddr;
+	reg [MDP_WIDTH-1:0] mdp_din;
+	wire [MDP_WIDTH-1:0] mdp_dout;
+	wire mdp_rd;
+	reg mdp_wr;
 	reg [L2_MAX_SIZE-1:0] lvl_raddr;
 	reg [L2_MAX_SIZE-1:0] lvl_waddr;
 	reg [L2_NUM_LVLS-1:0] lvl_din;
@@ -181,24 +201,44 @@ module det_skip_list
         .doutb  (rank_dout)
     );
 
-	assign meta_rd = 1'b1;
+	assign hsp_rd = 1'b1;
 	
     simple_dp_bram
     #(
-        .RAM_WIDTH    (META_WIDTH),
+        .RAM_WIDTH    (HSP_WIDTH),
     	.L2_RAM_DEPTH (L2_MAX_SIZE)
     )
     hsp
     (
         .clka   (clk), 
-        .wea    (meta_wr), 
-        .addra  (meta_waddr), 
-        .dina   (meta_din), 
+        .wea    (hsp_wr), 
+        .addra  (hsp_waddr), 
+        .dina   (hsp_din), 
     	.rstb   (rst),
         .clkb   (clk), 
-        .enb    (meta_rd), 
-        .addrb  (meta_raddr), 
-        .doutb  (meta_dout)
+        .enb    (hsp_rd), 
+        .addrb  (hsp_raddr), 
+        .doutb  (hsp_dout)
+    );
+
+	assign mdp_rd = 1'b1;
+	
+    simple_dp_bram
+    #(
+        .RAM_WIDTH    (MDP_WIDTH),
+    	.L2_RAM_DEPTH (L2_MAX_SIZE)
+    )
+    mdp
+    (
+        .clka   (clk), 
+        .wea    (mdp_wr), 
+        .addra  (mdp_waddr), 
+        .dina   (mdp_din), 
+    	.rstb   (rst),
+        .clkb   (clk), 
+        .enb    (mdp_rd), 
+        .addrb  (mdp_raddr), 
+        .doutb  (mdp_dout)
     );
 
     assign lvl_rd = 1'b1;
@@ -326,9 +366,9 @@ module det_skip_list
 	
     pifo_reg
     #(
-    	.L2_REG_WIDTH (L2_REG_WIDTH),
+    	.L2_MAX_SIZE (L2_REG_WIDTH),
         .RANK_WIDTH  (RANK_WIDTH),
-    	.META_WIDTH  (META_WIDTH)
+    	.META_WIDTH  (HSP_WIDTH+MDP_WIDTH)
     )
     pifo_reg
     (
@@ -344,7 +384,6 @@ module det_skip_list
 		.max_rank_out  (pr_max_rank),
 		.max_meta_out  (pr_max_meta),
 		.max_valid_out (pr_max_valid),
-		.num_entries   (pr_num_entries),
 		.empty         (pr_empty),
 		.full          (pr_full)
     );
@@ -367,10 +406,11 @@ module det_skip_list
 			init_busy <= 1'b1;
 			ins_busy <= 1'b0;
 			rmv_busy <= 1'b0;
-			sl_num_entries <= 0;
-            curr_max_lvl <= 0;
+			num_entries <= 0;
+            currMaxLevel <= 0;
 			rank_wr <= 1'b0;
-			meta_wr <= 1'b0;
+			hsp_wr <= 1'b0;
+			mdp_wr <= 1'b0;
 			lvl_wr <= 1'b0;
 			rptr_wr <= 1'b0;
 			lptr_wr <= 1'b0;
@@ -382,7 +422,6 @@ module det_skip_list
 		    search_done <= 1'b0;
 			insert_done <= 1'b0;
 			get_next_node <= 1'b0;
-			store_d <= 1'b0;
 			
 		end
 		else
@@ -392,7 +431,8 @@ module det_skip_list
 			sl_insert <= 1'b0;
 			sl_valid_out <= 1'b0;
 			rank_wr <= 1'b0;
-			meta_wr <= 1'b0;
+			hsp_wr <= 1'b0;
+			mdp_wr <= 1'b0;
 			lvl_wr <= 1'b0;
 			rptr_wr <= 1'b0;
 			lptr_wr <= 1'b0;
@@ -405,6 +445,8 @@ module det_skip_list
 			get_next_node <= 1'b0;
 			
 			bram_rd1 <= bram_rd;
+			remove_ltch <= remove;
+			insert_ltch <= insert;
 			
 		    case (main_state)
 			INIT_HEAD: // 0
@@ -413,9 +455,12 @@ module det_skip_list
 				rank_waddr <= node_cntr;
 				rank_din <= MAX_RANK;
 				rank_wr <= 1'b1;
-				meta_waddr <= node_cntr;
-				meta_din <= {META_WIDTH{1'b1}};
-				meta_wr <= 1'b1;
+				hsp_waddr <= node_cntr;
+				hsp_din <= {HSP_WIDTH{1'b1}};
+				hsp_wr <= 1'b1;
+				mdp_waddr <= node_cntr;
+				mdp_din <= {MDP_WIDTH{1'b1}};
+				mdp_wr <= 1'b1;
 				lvl_waddr <= node_cntr;
 				lvl_din <= lvl_cntr;
 				lvl_wr <= 1'b1;
@@ -448,9 +493,12 @@ module det_skip_list
 				rank_waddr <= node_cntr;
 				rank_din <= MIN_RANK;
 				rank_wr <= 1'b1;
-				meta_waddr <= node_cntr;
-				meta_din <= {META_WIDTH{1'b1}};
-				meta_wr <= 1'b1;
+				hsp_waddr <= node_cntr;
+				hsp_din <= {HSP_WIDTH{1'b1}};
+				hsp_wr <= 1'b1;
+				mdp_waddr <= node_cntr;
+				mdp_din <= {MDP_WIDTH{1'b1}};
+				mdp_wr <= 1'b1;
 				lvl_waddr <= node_cntr;
 				lvl_din <= lvl_cntr;
 				lvl_wr <= 1'b1;
@@ -498,8 +546,11 @@ module det_skip_list
 			end  
 			
 			RUN:  // 3
-			    if (insert == 1'b1 && sl_num_entries < MAX_SIZE)
-				    if (sl_num_entries == 0) 
+			//	if (remove == 1'b1 && num_entries > 0)
+			//		main_state <= REMOVE;
+			//	else if (insert == 1'b1 && num_entries < MAX_SIZE)
+			    if (insert == 1'b1 && num_entries < MAX_SIZE)
+				    if (num_entries == 0) 
 					    if (pr_full == 1'b0)
 						begin
 							pr_rank_in <= rank_in;
@@ -507,7 +558,7 @@ module det_skip_list
 					        pr_insert <= 1'b1;
 						end
 					    else
- 						// No need to check for free nodes because sl_num_entries = 0
+ 						// No need to check for free nodes because num_entries = 0
                         begin						
 					        if (rank_in < pr_max_rank)
 						    begin
@@ -567,12 +618,95 @@ module det_skip_list
 							end
 						end
 					end
+			
+		//	REMOVE: // 4
+		//	    if (sl_valid_out == 1'b1)
+		//		begin
+		//		    if (insert == 1'b1 || insert_ltch == 1'b1)
+		//		        if (num_entries == 0) 
+		//			        if (pr_full == 1'b0)
+		//					begin
+		//					    pr_rank_in <= rank_in;
+		//						pr_meta_in <= meta_in;
+		//			            pr_insert <= 1'b1;
+		//						main_state <= RUN;
+		//					end
+		//			        else 
+		//					// No need to check for free nodes because num_entries = 0
+        //                    begin						
+		//			            if (rank_in < pr_max_rank)
+		//				        begin
+		//					        sl_rank_in <= pr_max_rank;
+		//							sl_meta_in <= pr_max_meta;
+		//					        sl_insert <= 1'b1;
+		//					        pr_rank_in <= rank_in;
+		//							pr_meta_in <= meta_in;
+		//			                pr_insert <= 1'b1;
+		//					    end
+		//			            else
+		//						begin
+		//					        sl_rank_in <= pr_max_rank;
+		//							sl_meta_in <= pr_max_meta;
+		//			                sl_insert <= 1'b1;
+		//						end
+		//					    ins_busy <= 1'b1;
+		//			            main_state <= INSERT;
+		//				    end
+		//			    else if (free_nodes_avail == 1'b1)
+		//			    begin
+		//			        if (pr_full == 1'b1)
+		//					begin
+		//			            if (rank_in < pr_max_rank)
+		//				        begin
+		//					        sl_rank_in <= pr_max_rank;
+		//							sl_meta_in <= pr_max_meta;
+		//					        sl_insert <= 1'b1;
+		//					        pr_rank_in <= rank_in;
+		//							pr_meta_in <= meta_in;
+		//			                pr_insert <= 1'b1;
+		//					    end
+		//			            else
+		//						begin
+		//					        sl_rank_in <= pr_max_rank;
+		//							sl_meta_in <= pr_max_meta;
+		//			                sl_insert <= 1'b1;
+		//						end
+		//						ins_busy <= 1'b1;
+		//				        main_state <= INSERT;
+		//					end
+		//				    else
+		//					begin
+		//					    if ((pr_empty != 1'b1) && (rank_in < pr_max_rank))
+		//				        begin
+		//					        pr_rank_in <= rank_in;
+		//					    	pr_meta_in <= meta_in;
+		//			                pr_insert <= 1'b1;
+		//							main_state <= RUN;
+		//					    end
+		//					    else
+		//					    begin
+		//					        sl_rank_in <= rank_in;
+		//					        sl_meta_in <= meta_in;
+		//				            sl_insert <= 1'b1;
+		//				            ins_busy <= 1'b1;
+		//				            main_state <= INSERT;
+		//					    end
+		//				    end
+		//				end
+		//				else
+		//				    main_state <= RUN;
+		//			else
+		//			    main_state <= RUN;
+		//		end		
 				
-			INSERT: // 4
+			INSERT: // 5
 			    if (insert_done == 1'b1)
 				begin
-					sl_num_entries <= sl_num_entries + 1;
-					main_state <= RUN;
+					num_entries <= num_entries + 1;
+				//	if ((remove == 1'b1 || remove_ltch == 1'b1) && num_entries > 0)
+				//		main_state <= REMOVE;
+				//	else
+						main_state <= RUN;
 				end
 				
 			default:
@@ -584,9 +718,9 @@ module det_skip_list
             SRCH_IDLE: // 0
 			    if (start_search == 1'b1) 
 				begin
-                    level <= curr_max_lvl;
-                    n <= head[curr_max_lvl];
-                    u <= head[curr_max_lvl + 1];
+                    level <= currMaxLevel;
+                    n <= head[currMaxLevel];
+                    u <= head[currMaxLevel + 1];
                     search_state <= GO_DOWN;
                 end
 			
@@ -747,9 +881,9 @@ module det_skip_list
                 get_next_node <= 1'b1;
 
                 // Increment current level if we added a new level
-                if (level + 1 > curr_max_lvl)
+                if (level + 1 > currMaxLevel)
 			    begin
-                    curr_max_lvl <= curr_max_lvl + 1;
+                    currMaxLevel <= currMaxLevel + 1;
 				    u <= d;
                     n <= dD;
                     level <= level - 1;
@@ -786,9 +920,12 @@ module det_skip_list
 			        rank_waddr <= new_node;
 			        rank_din <= search_rank;
 				    rank_wr <= 1'b1;
-					meta_waddr <= new_node;
-					meta_din <= sl_meta_in;
-					meta_wr <= 1'b1;
+					hsp_waddr <= new_node;
+					hsp_din <= sl_meta_in[META_WIDTH-1:MDP_WIDTH];
+					hsp_wr <= 1'b1;
+					mdp_waddr <= new_node;
+					mdp_din <= sl_meta_in[MDP_WIDTH-1:0];
+					mdp_wr <= 1'b1;					
                     lvl_waddr <= new_node;
 				    lvl_din <= 0;
 				    lvl_wr <= 1'b1;
@@ -812,13 +949,11 @@ module det_skip_list
 				lptr_waddr <= dR;
 				lptr_din <= new_node;
 				lptr_wr <= 1'b1;
-				if (dR == tail[0])
-				    lptr_tail <= new_node;
 
                 // Connect left neighbor to new node
 				rptr_waddr <= d;
 				rptr_din <= new_node;
-				rptr_wr <= 1'b1;				    
+				rptr_wr <= 1'b1;
 				
 				// Request next node
                 get_next_node <= 1'b1;
@@ -837,7 +972,7 @@ module det_skip_list
 			RMV_IDLE: // 0
 			begin
 			    rmv_busy <= 1'b0;
-			    if (pr_full == 1'b0 && sl_num_entries > 0 && int_busy == 1'b0 && insert == 1'b0 && pr_insert == 1'b0 && sl_insert == 1'b0)
+			    if (pr_full == 1'b0 && num_entries > 0 && int_busy == 1'b0 && insert == 1'b0 && pr_insert == 1'b0 && sl_insert == 1'b0)
 				begin
 					rmv_busy <= 1'b1;
 					rmv_state <= RMV_CHK_BUSY;
@@ -848,35 +983,30 @@ module det_skip_list
 			    // Check to make sure an Insert operation did not start simultaneously
 			    if (ins_busy == 1'b0 && insert == 1'b0 && pr_insert == 1'b0 && sl_insert == 1'b0)
 				begin
-				//    lptr_raddr <= tail[0];
-                rank_raddr <= lptr_tail;
-				meta_raddr <= lptr_tail;
-				lptr_raddr <= lptr_tail;
-				uptr_raddr <= lptr_tail;
-				deq_node <= lptr_tail;
+				    lptr_raddr <= tail[0];
 					bram_rd <= 1'b1;
-				    sl_num_entries <= sl_num_entries - 1;
-				//	rmv_state <= RMV_WAIT_MEM_RD1;
-				rmv_state <= RMV_WAIT_MEM_RD2;
+				    num_entries <= num_entries - 1;
+					rmv_state <= RMV_WAIT_MEM_RD1;
 				end
 				else
 				    // Could not get busy semaphore, go back to RMV_IDLE
 					rmv_state <= RMV_IDLE;
 			
-			//RMV_WAIT_MEM_RD1: // 2
-			//    if (bram_rd1 == 1'b1)
-			//	    rmv_state <= RD_DEQ_NODE;
+			RMV_WAIT_MEM_RD1: // 2
+			    if (bram_rd1 == 1'b1)
+				    rmv_state <= RD_DEQ_NODE;
 					
-            //RD_DEQ_NODE: // 3
-			//begin
-            //    rank_raddr <= lptr_dout;
-			//	meta_raddr <= lptr_dout;
-			//	lptr_raddr <= lptr_dout;
-			//	uptr_raddr <= lptr_dout;
-			//	deq_node <= lptr_dout;
-			//	bram_rd <= 1'b1;
-			//	rmv_state <= RMV_WAIT_MEM_RD2;
-			//end
+            RD_DEQ_NODE: // 3
+			begin
+                rank_raddr <= lptr_dout;
+				hsp_raddr <= lptr_dout;
+				mdp_raddr <= lptr_dout;
+				lptr_raddr <= lptr_dout;
+				uptr_raddr <= lptr_dout;
+				deq_node <= lptr_dout;
+				bram_rd <= 1'b1;
+				rmv_state <= RMV_WAIT_MEM_RD2;
+			end
 
             RMV_WAIT_MEM_RD2: // 4
                 if (bram_rd1 == 1'b1)
@@ -886,7 +1016,7 @@ module det_skip_list
 			begin
 			    // Send node to PIFO reg
 			    pr_rank_in <= rank_dout;
-				pr_meta_in <= meta_dout;
+				pr_meta_in <= {hsp_dout, mdp_dout};
 				pr_insert <= 1'b1;
 				sl_valid_out <= 1'b1;
 				// Connect left neighbor to tail
@@ -896,8 +1026,6 @@ module det_skip_list
 				lptr_waddr <= tail[0];
 				lptr_din <= lptr_dout;
 				lptr_wr <= 1'b1;
-				lptr_tail <= lptr_dout;
-
 				// Clear dequeued node
 				// No need to clear right/left pointers since they're always overwritten on insert
 				uptr_waddr <= deq_node;
@@ -937,7 +1065,6 @@ module det_skip_list
 				lptr_waddr <= tail[rmv_lvl];
 				lptr_din <= lptr_dout;
 				lptr_wr <= 1'b1;
-				
 				// Clear node and return it
 				uptr_waddr <= rmv_node;
 		        uptr_din <= {L2_MAX_SIZE{1'b1}};
@@ -960,7 +1087,7 @@ module det_skip_list
 				else
 				begin
 				    if (rptr_dout == tail[rmv_lvl] && lptr_dout == head[rmv_lvl])
-					    curr_max_lvl <= curr_max_lvl - 1;
+					    currMaxLevel <= currMaxLevel - 1;
 
 				    rmv_state <= RMV_IDLE;
 				end
@@ -976,9 +1103,7 @@ module det_skip_list
 	assign int_busy = init_busy | ins_busy | rmv_busy;
 	// External busy including (PIFO Reg empty AND SL not empty) to prevent starvation of replenishment
 	// of PIFO Reg from Skip List
-	assign busy = int_busy || (pr_empty == 1'b1 && sl_num_entries > 0) ;
-	// Out total number of entries in both PIFO register and skip list
-	assign num_entries = {{(L2_MAX_SIZE-L2_REG_WIDTH){1'b0}}, pr_num_entries} + sl_num_entries;
+	assign busy = int_busy || (pr_empty == 1'b1 && num_entries > 0) ;
 	
 endmodule
 	
