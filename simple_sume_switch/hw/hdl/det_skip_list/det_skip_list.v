@@ -18,7 +18,7 @@ module det_skip_list
 	input [HSP_WIDTH+MDP_WIDTH-1:0] meta_in,
 	output [RANK_WIDTH-1:0] rank_out,
 	output [HSP_WIDTH+MDP_WIDTH-1:0] meta_out,
-        output reg [L2_MAX_SIZE-1:0] num_entries,
+        output [L2_MAX_SIZE:0] num_entries,
 	output valid_out,
 	output busy,
 	output full
@@ -113,7 +113,8 @@ module det_skip_list
 	reg [2:0] rmv_state;
 	reg [L2_NUM_LVLS-1:0] lvl_cntr;
 	reg [L2_MAX_SIZE-1:0] node_cntr;
-//	reg [L2_MAX_SIZE-1:0] num_entries;
+	reg [L2_MAX_SIZE-1:0] sl_num_entries;
+	wire [L2_REG_WIDTH:0] pr_num_entries;
 	reg [L2_MAX_SIZE-1:0] rank_raddr;
 	reg [L2_MAX_SIZE-1:0] rank_waddr;
 	reg [RANK_WIDTH-1:0] rank_din;
@@ -182,6 +183,8 @@ module det_skip_list
 	wire free_nodes_avail;
 
 	assign rank_rd = 1'b1;
+
+	assign num_entries = sl_num_entries + pr_num_entries;
 	
     simple_dp_bram
     #(
@@ -366,7 +369,7 @@ module det_skip_list
 	
     pifo_reg
     #(
-    	.L2_MAX_SIZE (L2_REG_WIDTH),
+    	.L2_REG_WIDTH (L2_REG_WIDTH),
         .RANK_WIDTH  (RANK_WIDTH),
     	.META_WIDTH  (HSP_WIDTH+MDP_WIDTH)
     )
@@ -385,7 +388,8 @@ module det_skip_list
 		.max_meta_out  (pr_max_meta),
 		.max_valid_out (pr_max_valid),
 		.empty         (pr_empty),
-		.full          (pr_full)
+		.full          (pr_full),
+		.num_entries   (pr_num_entries)
     );
 
     // Main
@@ -406,7 +410,7 @@ module det_skip_list
 			init_busy <= 1'b1;
 			ins_busy <= 1'b0;
 			rmv_busy <= 1'b0;
-			num_entries <= 0;
+			sl_num_entries <= 0;
             currMaxLevel <= 0;
 			rank_wr <= 1'b0;
 			hsp_wr <= 1'b0;
@@ -549,8 +553,8 @@ module det_skip_list
 			//	if (remove == 1'b1 && num_entries > 0)
 			//		main_state <= REMOVE;
 			//	else if (insert == 1'b1 && num_entries < MAX_SIZE)
-			    if (insert == 1'b1 && num_entries < MAX_SIZE)
-				    if (num_entries == 0) 
+			    if (insert == 1'b1 && sl_num_entries < MAX_SIZE)
+				    if (sl_num_entries == 0) 
 					    if (pr_full == 1'b0)
 						begin
 							pr_rank_in <= rank_in;
@@ -702,7 +706,7 @@ module det_skip_list
 			INSERT: // 5
 			    if (insert_done == 1'b1)
 				begin
-					num_entries <= num_entries + 1;
+					sl_num_entries <= sl_num_entries + 1;
 				//	if ((remove == 1'b1 || remove_ltch == 1'b1) && num_entries > 0)
 				//		main_state <= REMOVE;
 				//	else
@@ -972,7 +976,7 @@ module det_skip_list
 			RMV_IDLE: // 0
 			begin
 			    rmv_busy <= 1'b0;
-			    if (pr_full == 1'b0 && num_entries > 0 && int_busy == 1'b0 && insert == 1'b0 && pr_insert == 1'b0 && sl_insert == 1'b0)
+			    if (pr_full == 1'b0 && sl_num_entries > 0 && int_busy == 1'b0 && insert == 1'b0 && pr_insert == 1'b0 && sl_insert == 1'b0)
 				begin
 					rmv_busy <= 1'b1;
 					rmv_state <= RMV_CHK_BUSY;
@@ -985,7 +989,7 @@ module det_skip_list
 				begin
 				    lptr_raddr <= tail[0];
 					bram_rd <= 1'b1;
-				    num_entries <= num_entries - 1;
+				    sl_num_entries <= sl_num_entries - 1;
 					rmv_state <= RMV_WAIT_MEM_RD1;
 				end
 				else
@@ -1103,7 +1107,7 @@ module det_skip_list
 	assign int_busy = init_busy | ins_busy | rmv_busy;
 	// External busy including (PIFO Reg empty AND SL not empty) to prevent starvation of replenishment
 	// of PIFO Reg from Skip List
-	assign busy = int_busy || (pr_empty == 1'b1 && num_entries > 0) ;
+	assign busy = int_busy || (pr_empty == 1'b1 && sl_num_entries > 0) ;
 	
 endmodule
 	
