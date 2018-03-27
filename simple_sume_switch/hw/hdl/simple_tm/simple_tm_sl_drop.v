@@ -60,13 +60,13 @@ module simple_tm_sl_drop
     parameter Q_ID_POS             = 64,
 
     // max num pkts the pifo can store
-    parameter PIFO_DEPTH           = 2048,
+    parameter PIFO_DEPTH           = 4096,
     parameter PIFO_REG_DEPTH       = 32,
     // max # 64B pkts that can fit in storage
     parameter STORAGE_MAX_PKTS     = 2048,
-    parameter NUM_SKIP_LISTS       = 1,
+    parameter NUM_SKIP_LISTS       = 12,
     // Queue params
-    parameter NUM_QUEUES           = 2,
+    parameter NUM_QUEUES           = 4,
     parameter QUEUE_LIMIT          = STORAGE_MAX_PKTS/NUM_QUEUES 
 )
 (
@@ -145,8 +145,8 @@ module simple_tm_sl_drop
 
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
-   reg  [RANK_WIDTH-1 : 0]              rank_in, rank_in_next;
-   reg  [PTRS_WIDTH-1 : 0]              ptrs_in, ptrs_in_next;
+//   reg  [RANK_WIDTH-1 : 0]              rank_in, rank_in_next;
+//   reg  [PTRS_WIDTH-1 : 0]              ptrs_in, ptrs_in_next;
    reg pkt_in_accepted;
 //   reg pkt_in_accepted, pkt_in_accepted_r, pkt_in_accepted_r_next;
 
@@ -222,15 +222,16 @@ module simple_tm_sl_drop
    );
 
     /* PIFO to store rank values and pointers */ 
-    det_skip_list
+//    det_skip_list
+    pifo_top
     #(
      .L2_MAX_SIZE(log2(PIFO_DEPTH)),
      .RANK_WIDTH(RANK_WIDTH),
-     .HSP_WIDTH(PTRS_WIDTH/2),
-     .MDP_WIDTH(PTRS_WIDTH/2),
-     .L2_REG_WIDTH(log2(PIFO_REG_DEPTH))
+     .META_WIDTH(PTRS_WIDTH),
+     .L2_REG_WIDTH(log2(PIFO_REG_DEPTH)),
+     .NUM_SKIP_LISTS(NUM_SKIP_LISTS)
     )
-    det_skip_list_i
+    pifo_inst
     (
      .rst       (~axis_resetn),
      .clk       (axis_aclk),
@@ -489,8 +490,8 @@ module simple_tm_sl_drop
        storage_ptr_in_tlast = 1;
        // Wait for the PIFO to produce valid data and the pkt_storage to be ready to accept read requests
        // And we actually want to read the pkts out
-       if (pifo_valid_out && storage_ptr_in_tready && m_axis_tready) begin
-//       if (pifo_valid_out && storage_ptr_in_tready) begin
+//       if (pifo_valid_out && storage_ptr_in_tready && m_axis_tready) begin
+       if (pifo_valid_out && storage_ptr_in_tready) begin
            // read PIFO and submit read request to pkt_storage
            pifo_remove = 1;
            storage_ptr_in_tdata = pifo_meta_out;
@@ -506,6 +507,8 @@ module simple_tm_sl_drop
 // debugging signals
 wire [Q_SIZE_BITS-1:0] q_size_0 = q_size_r[0];
 wire [Q_SIZE_BITS-1:0] q_size_1 = q_size_r[1];
+wire [Q_SIZE_BITS-1:0] q_size_2 = q_size_r[2];
+wire [Q_SIZE_BITS-1:0] q_size_3 = q_size_r[3];
 
 
 `ifdef COCOTB_SIM

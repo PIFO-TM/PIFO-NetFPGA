@@ -186,6 +186,8 @@ module pifo_pkt_storage
    reg [META_ADDR_WIDTH-1:0] rfsm_cur_meta_ptr, rfsm_cur_meta_ptr_next;
    reg [SEG_ADDR_WIDTH-1:0] rfsm_cur_seg_ptr, rfsm_cur_seg_ptr_next;
 
+   reg free_list_written_r, free_list_written_r_next;
+
    reg [C_S_AXIS_DATA_WIDTH-1:0] seg_word_one_tdata_out, seg_word_two_tdata_out;
    reg [(C_S_AXIS_DATA_WIDTH/8)-1:0] seg_word_one_tkeep_out, seg_word_two_tkeep_out;
 
@@ -437,6 +439,8 @@ module pifo_pkt_storage
       seg_word_two_tdata_next = seg_word_two_tdata;
       seg_word_two_tkeep_next = seg_word_two_tkeep;
 
+      free_list_written_r_next = 0;
+
       case(rfsm_state)
           WAIT_REQUEST: begin
               // no longer end of pkt
@@ -469,9 +473,19 @@ module pifo_pkt_storage
               if (bram_rd_cycle_cnt == BRAM_READ_DLY-1) begin
                   // Add head_seg_ptr and meta_ptr to free list fifos using registered values
                   seg_fl_addr_in = rfsm_cur_seg_ptr;
-                  seg_fl_wr_en = 1;
                   meta_fl_addr_in = rfsm_cur_meta_ptr;
-                  meta_fl_wr_en = 1;
+
+                  // only write to free list once
+                  free_list_written_r_next = 1;
+                  if (~free_list_written_r) begin
+                      seg_fl_wr_en = 1;
+                      meta_fl_wr_en = 1;
+                  end
+                  else begin
+                      seg_fl_wr_en = 0;
+                      meta_fl_wr_en = 0;
+                  end
+
                   // Write first word of pkt (and metadata) onto m_axis_pkt_* bus
                   {seg_word_one_tdata_out, seg_word_one_tkeep_out, seg_word_two_tdata_out, seg_word_two_tkeep_out, next_seg_ptr_out} = seg_bram_dout;
 
@@ -496,11 +510,13 @@ module pifo_pkt_storage
                       if (m_axis_pkt_tready) begin
                           // transition to WAIT_REQUEST state
                           rfsm_state_next = WAIT_REQUEST;
+                          free_list_written_r_next = 0;
                       end
                   end
                   else if (m_axis_pkt_tready) begin
                       // transition to WRITE_OUT_WORD_TWO state
                       rfsm_state_next = WRITE_OUT_WORD_TWO;
+                      free_list_written_r_next = 0;
                   end
 
                   if (next_seg_ptr_out != null_seg_ptr && m_axis_pkt_tready) begin
@@ -526,6 +542,15 @@ module pifo_pkt_storage
               // Add next_seg_ptr to segment free list
               seg_fl_addr_in = rfsm_cur_seg_ptr;
               seg_fl_wr_en = 1;
+              // only write to free list once
+              free_list_written_r_next = 1;
+              if (~free_list_written_r) begin
+                  seg_fl_wr_en = 1;
+              end
+              else begin
+                  seg_fl_wr_en = 0;
+              end
+
               // Receive segment data from BRAM
               {seg_word_one_tdata_out, seg_word_one_tkeep_out, seg_word_two_tdata_out, seg_word_two_tkeep_out, next_seg_ptr_out} = seg_bram_dout;
               // Write first word of segment onto m_axis_pkt_* bus
@@ -548,6 +573,7 @@ module pifo_pkt_storage
                   if (m_axis_pkt_tready) begin
                       // transition to WAIT_REQUEST state
                       rfsm_state_next = WAIT_REQUEST;
+                      free_list_written_r_next = 0;
                   end
               end
               else if (m_axis_pkt_tready) begin
@@ -596,6 +622,8 @@ module pifo_pkt_storage
 
          meta_rd_addr <= 0;
          seg_rd_addr <= 0;
+
+         free_list_written_r <= 0;
          
          rfsm_cur_meta_ptr <= 0;
          rfsm_cur_seg_ptr <= 0;
@@ -616,6 +644,8 @@ module pifo_pkt_storage
 
          meta_rd_addr <= meta_rd_addr_next;
          seg_rd_addr <= seg_rd_addr_next;
+
+         free_list_written_r <= free_list_written_r_next;
          
          rfsm_cur_meta_ptr <= rfsm_cur_meta_ptr_next;
          rfsm_cur_seg_ptr <= rfsm_cur_seg_ptr_next;

@@ -10,8 +10,11 @@ import json
 import re
 import subprocess
 
-PARAMS_FILE = 'cocotb_tm_wrapper.v'
+PARAMS_FILE = 'cocotb_tm_bp_wrapper.v'
+FILL_PARAM_FILE = 'test_const_fill.py'
 RESULTS_FILE = 'cocotb_results.json'
+
+ERROR = False
 
 class TM_hw_sim(object):
     def __init__(self, outDir):
@@ -23,38 +26,76 @@ class TM_hw_sim(object):
         self.enq_ax = axarr[0]
         self.deq_ax = axarr[1]
 
+    def test_num_skip_lists(self, num_skip_lists):
+        print 'testing num skip lists...'
+        results = []
+        for num_sl in num_skip_lists:
+            sim_res = self.run_sim(num_skip_lists=num_sl)
+            print 'finished sim for num_sl = {}'.format(num_sl)
+            results.append(sim_res)
+        self.plot_results(num_skip_lists, results, 'num_skip_lists', 'upper right', 'num_sl')
+
+    def test_pifo_reg_depth(self, reg_depths):
+        print 'testing reg depth...'
+        results = []
+        for reg_depth in reg_depths:
+            sim_res = self.run_sim(pifo_reg_depth=reg_depth)
+            print 'finished sim for reg_depth = {}'.format(reg_depth)
+            results.append(sim_res)
+        self.plot_results(reg_depths, results, 'pifo_reg_depth', 'upper right', 'pkts')
+
     def test_pifo_depth(self, pifo_depths):
         print 'testing pifo depth...'
         results = []
         for pifo_depth in pifo_depths:
-            sim_res = self.run_sim(pifo_depth)
+            sim_res = self.run_sim(pifo_depth=pifo_depth)
             print 'finished sim for pifo_depth = {}'.format(pifo_depth)
             results.append(sim_res)
         self.plot_results(pifo_depths, results, 'pifo_depth', 'lower right', 'pkts')
 
-    def run_sim(self, pifo_depth):
+    def test_fill_level(self, fill_levels):
+        print 'testing fill level ...'
+        results = []
+        for fill in fill_levels:
+            sim_res = self.run_sim(fill_level=fill)
+            print 'finished sim for fill_level = {}'.format(fill)
+            results.append(sim_res)
+        self.plot_results(fill_levels, results, 'fill_level', 'lower right', 'pkts')
+
+    def run_sim(self, pifo_depth=4096, pifo_reg_depth=32, num_skip_lists=1, fill_level=2048):
+#    def run_sim(self, pifo_depth=2048, pifo_reg_depth=32, num_skip_lists=1, fill_level=1024):
+#    def run_sim(self, pifo_depth=128, pifo_reg_depth=32, num_skip_lists=1, fill_level=1024):
         # delete any existing RESULTS_FILE
         os.system('rm -f {}'.format(RESULTS_FILE))
         # set parameters
-        self.params_file = open(PARAMS_FILE).read()
-        self.set_param('PIFO_DEPTH', pifo_depth)
+        params_file = open(PARAMS_FILE).read()
+        params_file = self.set_param('PIFO_DEPTH', pifo_depth, params_file)
+        params_file = self.set_param('PIFO_REG_DEPTH', pifo_reg_depth, params_file)
+        params_file = self.set_param('NUM_SKIP_LISTS', num_skip_lists, params_file)
         with open(PARAMS_FILE, 'w') as f:
-            f.write(self.params_file)
+            f.write(params_file)
+        # set fill level param
+        fill_param_file = open(FILL_PARAM_FILE).read()
+        fill_param_file = self.set_param('FILL_LEVEL', fill_level, fill_param_file)
+        with open(FILL_PARAM_FILE, 'w') as f:
+            f.write(fill_param_file)
         # run cocotb simulation
         output = subprocess.check_output('make', shell=True)
         if 'ERROR:' in output:
+            ERROR = True
             print output
         # collect the results
         sim_res = self.get_results()
         return sim_res
 
-    def set_param(self, param, value):
+    def set_param(self, param, value, file_content):
         fmat = r'{} = \d*'.format(param)
-        obj = re.search(fmat, self.params_file)
+        obj = re.search(fmat, file_content)
         if obj is None:
             print >> sys.stderr, "ERROR: could not find parameter in PARAMS_FILE"
             sys.exit(1)
-        self.params_file = self.params_file.replace(obj.group(0), '{} = {}'.format(param, value))
+        new_file_content = file_content.replace(obj.group(0), '{} = {}'.format(param, value))
+        return new_file_content
 
     def get_results(self):
         with open(RESULTS_FILE) as f:
@@ -85,6 +126,7 @@ class TM_hw_sim(object):
         pp.savefig(fig)
         pp.close()
         print 'saved plot: {}'.format(filename)
+        print 'errors = {}'.format(ERROR)
 
     def plot_data(self, xdata, ydata, labels, xlabel, ylabel, title, loc, ax):
         for (x, y, label) in zip(xdata, ydata, labels):

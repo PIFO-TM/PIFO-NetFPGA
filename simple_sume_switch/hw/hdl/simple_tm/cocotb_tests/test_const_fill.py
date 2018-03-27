@@ -17,7 +17,7 @@ from scapy.all import Ether, IP, UDP, hexdump
 import sys, os
 import json
 
-FILL_LEVEL = 6
+FILL_LEVEL = 2048
 NUM_SAMPLES = 100
 
 RESULTS_FILE = 'cocotb_results.json'
@@ -25,6 +25,8 @@ PERIOD = 5000
 IDLE_TIMEOUT = PERIOD*1000
 
 DEBUG = True
+
+input_ranks = []
 
 def make_pkts_and_meta(n):
     pkts_and_meta = [] 
@@ -34,7 +36,7 @@ def make_pkts_and_meta(n):
         pkt = pkt / ('\x11'*18 + '\x22'*32)
 
         rank = random.randint(0, 100)
-    
+        input_ranks.append(rank)
         # build the metadata 
         meta = Metadata(pkt_len=len(pkt), src_port=0b00000001, dst_port=0b00000100, rank=rank)
         tuser = BinaryValue(bits=len(meta)*8, bigEndian=False)
@@ -112,7 +114,7 @@ def test_const_fill(dut):
         enq_delays += pkt_in_stats.delays
         deq_delays += pkt_out_stats.delays
         # wait a few cycles between samples
-#        yield ClockCycles(dut.axis_aclk, 30)
+        yield ClockCycles(dut.axis_aclk, 30)
         if pkt_slave.error:
             print "ERROR: pkt_slave timed out"
             break
@@ -129,6 +131,7 @@ def test_const_fill(dut):
 
     actual_ranks = [Metadata(m.get_buff()).rank for m in meta_out]
 
+    print 'input_ranks           = {}'.format(input_ranks)
     print 'expected output ranks = {}'.format(expected_ranks)
     print 'actual output ranks   = {}'.format(actual_ranks)
     print ''

@@ -328,14 +328,17 @@ module nf_datapath #(
     wire [C_S_AXI_DATA_WIDTH-1:0] bytes_dropped;
     wire [5-1:0] pkt_dropped; 
 
-   tm_top
+   simple_tm_sl_drop
    #(
        .C_M_AXIS_DATA_WIDTH(C_M_AXIS_DATA_WIDTH),
        .C_S_AXIS_DATA_WIDTH(C_S_AXIS_DATA_WIDTH),
        .C_M_AXIS_TUSER_WIDTH(C_M_AXIS_TUSER_WIDTH),
        .C_S_AXIS_TUSER_WIDTH(C_S_AXIS_TUSER_WIDTH),
-       .PIFO_DEPTH  (16),
-       .STORAGE_MAX_PKTS (1024)
+       .PIFO_DEPTH  (1024),
+       .PIFO_REG_DEPTH (32),
+       .STORAGE_MAX_PKTS (1024),
+       .NUM_SKIP_LISTS (1),
+       .NUM_QUEUES (1)
    )
    tm_inst
    (

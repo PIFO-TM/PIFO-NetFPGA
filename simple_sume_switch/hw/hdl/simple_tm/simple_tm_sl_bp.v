@@ -280,7 +280,6 @@ module simple_tm_sl_bp
        // Wait for the PIFO to produce valid data and the pkt_storage to be ready to accept read requests
        // And we actually want to read the pkts out
        if (pifo_valid_out && storage_ptr_in_tready && m_axis_tready) begin
-//       if (pifo_valid_out && storage_ptr_in_tready) begin
            // read PIFO and submit read request to pkt_storage
            pifo_remove = 1;
            storage_ptr_in_tdata = pifo_meta_out;
