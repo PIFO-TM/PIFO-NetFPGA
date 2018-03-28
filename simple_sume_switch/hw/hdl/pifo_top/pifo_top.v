@@ -84,7 +84,7 @@ module pifo_top
         for (k=0; k<NUM_SKIP_LISTS; k=k+1) begin: skip_lists
             det_skip_list
             #(
-             .L2_MAX_SIZE(L2_MAX_SIZE),
+             .L2_MAX_SIZE(L2_MAX_SIZE - log2(NUM_SKIP_LISTS)),
              .RANK_WIDTH(RANK_WIDTH),
              .META_WIDTH(META_WIDTH + TSTAMP_BITS),
              .L2_REG_WIDTH(L2_REG_WIDTH)
