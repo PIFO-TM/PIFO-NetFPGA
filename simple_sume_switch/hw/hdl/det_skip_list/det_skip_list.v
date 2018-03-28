@@ -532,6 +532,8 @@ module det_skip_list
 							        sl_rank_in <= pr_max_rank;
 								    sl_meta_in <= pr_max_meta;
 							        sl_insert <= 1'b1;
+							        ins_busy <= 1'b1;
+					                main_state <= INSERT;
 								end
 							    pr_rank_in <= rank_in;
 								pr_meta_in <= meta_in;
@@ -542,9 +544,9 @@ module det_skip_list
 							    sl_rank_in <= rank_in;
 								sl_meta_in <= meta_in;
 					            sl_insert <= 1'b1;
+							    ins_busy <= 1'b1;
+					            main_state <= INSERT;
 							end
-							ins_busy <= 1'b1;
-					        main_state <= INSERT;
 						end
 					else if (free_nodes_avail == 1'b1)
 					begin
@@ -558,6 +560,8 @@ module det_skip_list
 							        sl_rank_in <= pr_max_rank;
 								    sl_meta_in <= pr_max_meta;
 							        sl_insert <= 1'b1;
+							        ins_busy <= 1'b1;
+						            main_state <= INSERT;
 								end
 							    pr_rank_in <= rank_in;
 								pr_meta_in <= meta_in;
@@ -568,9 +572,9 @@ module det_skip_list
 							    sl_rank_in <= rank_in;
 								sl_meta_in <= meta_in;
 					            sl_insert <= 1'b1;
+							    ins_busy <= 1'b1;
+						        main_state <= INSERT;
 							end
-							ins_busy <= 1'b1;
-						    main_state <= INSERT;
 						end
 						else
 						begin
