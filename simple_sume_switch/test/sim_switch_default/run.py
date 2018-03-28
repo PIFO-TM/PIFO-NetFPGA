@@ -86,7 +86,7 @@ nf_port_map = {'nf0':0b00000001, 'nf1':0b00000100, 'nf2':0b00010000, 'nf3':0b010
 
 # send packets after the configuration writes have finished
 #baseTime = 1044e-9 + (232e-9)*config_writes.NUM_WRITES #120e-6
-baseTime = 10e-6
+baseTime = 30e-6
 delta = 1e-6 #1e-8
 
 schedule_pkts(nf0_applied, 'nf0')
