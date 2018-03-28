@@ -37,6 +37,7 @@ module pifo_top
     localparam NUM_LEVELS = L2_NUM_SL_FLOOR + 1;
 
     localparam TSTAMP_BITS = 32;
+    localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE - log2(NUM_SKIP_LISTS);
 
     /*------------ Wires and Regs ------------*/
     reg [NUM_SKIP_LISTS-1:0]            sl_insert;
@@ -48,7 +49,7 @@ module pifo_top
     wire [NUM_SKIP_LISTS-1:0]           sl_valid_out;
     wire [NUM_SKIP_LISTS-1:0]           sl_busy_out;
     wire [NUM_SKIP_LISTS-1:0]           sl_full_out;
-    wire [L2_MAX_SIZE:0]              sl_num_entries [NUM_SKIP_LISTS-1:0];
+    wire [L2_SKIP_LIST_SIZE:0]          sl_num_entries [NUM_SKIP_LISTS-1:0];
 
     // insertion selection signals
     reg [(2**NUM_LEVELS)-1:0]    sl_valid_lvls        [NUM_LEVELS:0];
@@ -84,7 +85,7 @@ module pifo_top
         for (k=0; k<NUM_SKIP_LISTS; k=k+1) begin: skip_lists
             det_skip_list
             #(
-             .L2_MAX_SIZE(L2_MAX_SIZE - log2(NUM_SKIP_LISTS)),
+             .L2_MAX_SIZE(L2_SKIP_LIST_SIZE),
              .RANK_WIDTH(RANK_WIDTH),
              .META_WIDTH(META_WIDTH + TSTAMP_BITS),
              .L2_REG_WIDTH(L2_REG_WIDTH)
