@@ -64,11 +64,9 @@ module det_skip_list
 	localparam RMV_IDLE           = 3'b000,
 	           RMV_CHK_BUSY       = 3'b001,
 	           RMV_WAIT_MEM_RD1   = 3'b010,
-			   RD_DEQ_NODE        = 3'b011,
-			   RMV_WAIT_MEM_RD2   = 3'b100,
-	           RMV_DEQ_NODE       = 3'b101,
-               RMV_WAIT_MEM_RD3   = 3'b110,
-               RMV_CONN_LEFT_TAIL = 3'b111;			   
+	           RMV_DEQ_NODE       = 3'b011,
+               RMV_WAIT_MEM_RD2   = 3'b100,
+               RMV_CONN_LEFT_TAIL = 3'b101;
 	
 	localparam MIN_RANK = {RANK_WIDTH{1'b0}};
 	localparam MAX_RANK = {RANK_WIDTH{1'b1}};
@@ -437,7 +435,7 @@ module det_skip_list
 				rptr_waddr <= node_cntr;
 				rptr_din <= node_cntr + 1;
 				rptr_wr <= 1'b1;
-			rptr_head[lvl_cntr] <= node_cntr + 1;
+			    rptr_head[lvl_cntr] <= node_cntr + 1;
 				lptr_waddr <= node_cntr;
 				lptr_din <= {L2_MAX_SIZE{1'b1}};
 				lptr_wr <= 1'b1;
@@ -447,7 +445,7 @@ module det_skip_list
 					dptr_waddr <= node_cntr;
 					dptr_din <= node_cntr - 2;
 					dptr_wr <= 1'b1;
-				dptr_head[lvl_cntr] <= node_cntr - 2;
+				    dptr_head[lvl_cntr] <= node_cntr - 2;
 				end
 				if (lvl_cntr < NUM_LVLS - 1)
 				begin
@@ -528,9 +526,13 @@ module det_skip_list
                         begin						
 					        if (rank_in < pr_max_rank)
 						    begin
-							    sl_rank_in <= pr_max_rank;
-								sl_meta_in <= pr_max_meta;
-							    sl_insert <= 1'b1;
+							    // Send max value to skip list unless we are simultaneously removing an entry 
+							    if (remove == 1'b0)
+								begin
+							        sl_rank_in <= pr_max_rank;
+								    sl_meta_in <= pr_max_meta;
+							        sl_insert <= 1'b1;
+								end
 							    pr_rank_in <= rank_in;
 								pr_meta_in <= meta_in;
 					            pr_insert <= 1'b1;
@@ -550,9 +552,13 @@ module det_skip_list
 						begin
 					        if (rank_in < pr_max_rank)
 						    begin
-							    sl_rank_in <= pr_max_rank;
-								sl_meta_in <= pr_max_meta;
-							    sl_insert <= 1'b1;
+							    // Send max value to skip list unless we are simultaneously removing an entry 
+							    if (remove == 1'b0)
+								begin
+							        sl_rank_in <= pr_max_rank;
+								    sl_meta_in <= pr_max_meta;
+							        sl_insert <= 1'b1;
+								end
 							    pr_rank_in <= rank_in;
 								pr_meta_in <= meta_in;
 					            pr_insert <= 1'b1;
@@ -604,13 +610,10 @@ module det_skip_list
                     level <= curr_max_lvl;
                     n <= head[curr_max_lvl];
                     u <= head[curr_max_lvl + 1];
-				d <= head[curr_max_lvl];
-                //    search_state <= GO_DOWN;
-				cons_nodes <= 0;
-
-				first_node <= 1'b1;
-                search_state <= GO_RIGHT1;
-					
+				    d <= head[curr_max_lvl];
+				    cons_nodes <= 0;
+				    first_node <= 1'b1;
+                    search_state <= GO_RIGHT1;
                 end
 			
             GO_DOWN: // 1
@@ -639,12 +642,10 @@ module det_skip_list
 			
             GO_RIGHT1: // 3
 			begin
-			if (first_node == 1'b1)
-			begin
-
+			    if (first_node == 1'b1)
+			    begin
 				    dR <= rptr_head[curr_max_lvl];
 					dD <= dptr_head[curr_max_lvl];
-					//store_d = 1'b0;
 
                     // Store current node in l
                     l <= n;
@@ -659,41 +660,39 @@ module det_skip_list
 					dptr_raddr <= rptr_head[curr_max_lvl];
 					bram_rd <= 1'b1;
 					search_state <= WAIT_MEM_RD2;
-			
-			end
-			else
-			begin
-			
-				if (store_d == 1'b1)
-				begin
-				    dR <= rptr_dout;
-					dD <= dptr_dout;
-					store_d = 1'b0;
-				end
-                if (rptr_dout != {L2_MAX_SIZE{1'b1}})
-				begin
-                    // Store current node in l
-                    l <= n;
-					lVal <= rank_dout;
-                    // Move right
-                    n <= rptr_dout;
-					// Read node n
-					rank_raddr <= rptr_dout;
-					lvl_raddr <= rptr_dout;
-					rptr_raddr <= rptr_dout;
-                    uptr_raddr <= rptr_dout;
-					dptr_raddr <= rptr_dout;
-					bram_rd <= 1'b1;
-					search_state <= WAIT_MEM_RD2;
-				end
-				else
-				begin
-				    u <= d;
-                    n <= dptr_dout;
-                    level <= level - 1;
-					search_state <= GO_DOWN;
-				end
-			end
+			    end
+			    else
+			    begin
+				    if (store_d == 1'b1)
+				    begin
+				        dR <= rptr_dout;
+					    dD <= dptr_dout;
+					    store_d = 1'b0;
+				    end
+                    if (rptr_dout != {L2_MAX_SIZE{1'b1}})
+				    begin
+                        // Store current node in l
+                        l <= n;
+					    lVal <= rank_dout;
+                        // Move right
+                        n <= rptr_dout;
+					    // Read node n
+					    rank_raddr <= rptr_dout;
+					    lvl_raddr <= rptr_dout;
+					    rptr_raddr <= rptr_dout;
+                        uptr_raddr <= rptr_dout;
+					    dptr_raddr <= rptr_dout;
+					    bram_rd <= 1'b1;
+					    search_state <= WAIT_MEM_RD2;
+				    end
+				    else
+				    begin
+				        u <= d;
+                        n <= dptr_dout;
+                        level <= level - 1;
+					    search_state <= GO_DOWN;
+				    end
+			    end
 			end
 			
 			WAIT_MEM_RD2: // 4
@@ -771,8 +770,8 @@ module det_skip_list
 				dptr_waddr <= new_node;
 				dptr_din <= l;
 				dptr_wr <= 1'b1;
-			if (new_node == head[level+1])
-                dptr_head[level+1] <= new_node;
+			    if (new_node == head[level+1])
+                    dptr_head[level+1] <= new_node;
 				search_state <= SRCH_CONN_NEAR;
             end
 			
@@ -787,8 +786,8 @@ module det_skip_list
 				rptr_waddr <= u;
 				rptr_din <= new_node;
 				rptr_wr <= 1'b1;
-			if (u == head[level+1])
-			    rptr_head[level+1] <= new_node;
+			    if (u == head[level+1])
+			        rptr_head[level+1] <= new_node;
 			    
 				
                 // Connect node below to new node
@@ -866,18 +865,19 @@ module det_skip_list
 				lptr_din <= new_node;
 				lptr_wr <= 1'b1;
 				if (dR == tail[0])
+				begin
+				    // rank_tail <= search_rank;
 				    lptr_tail <= new_node;
-
+                end
                 // Connect left neighbor to new node
 				rptr_waddr <= d;
 				rptr_din <= new_node;
 				rptr_wr <= 1'b1;				    
-			if (d == head[0])
-			    rptr_head[0] <= new_node;
+			    if (d == head[0])
+			        rptr_head[0] <= new_node;
 				
 				// Request next node
                 get_next_node <= 1'b1;
-				//busy <= 1'b0;
 				
 				ins_state <= INS_IDLE;
 			end
@@ -903,41 +903,24 @@ module det_skip_list
 			    // Check to make sure an Insert operation did not start simultaneously
 			    if (ins_busy == 1'b0 && insert == 1'b0 && pr_insert == 1'b0 && sl_insert == 1'b0)
 				begin
-				//    lptr_raddr <= tail[0];
-                rank_raddr <= lptr_tail;
-				meta_raddr <= lptr_tail;
-				lptr_raddr <= lptr_tail;
-				uptr_raddr <= lptr_tail;
-				deq_node <= lptr_tail;
+                    rank_raddr <= lptr_tail;
+				    meta_raddr <= lptr_tail;
+				    lptr_raddr <= lptr_tail;
+				    uptr_raddr <= lptr_tail;
+				    deq_node <= lptr_tail;
 					bram_rd <= 1'b1;
 				    sl_num_entries <= sl_num_entries - 1;
-				//	rmv_state <= RMV_WAIT_MEM_RD1;
-				rmv_state <= RMV_WAIT_MEM_RD2;
+				    rmv_state <= RMV_WAIT_MEM_RD1;
 				end
 				else
 				    // Could not get busy semaphore, go back to RMV_IDLE
 					rmv_state <= RMV_IDLE;
 			
-			//RMV_WAIT_MEM_RD1: // 2
-			//    if (bram_rd1 == 1'b1)
-			//	    rmv_state <= RD_DEQ_NODE;
-					
-            //RD_DEQ_NODE: // 3
-			//begin
-            //    rank_raddr <= lptr_dout;
-			//	meta_raddr <= lptr_dout;
-			//	lptr_raddr <= lptr_dout;
-			//	uptr_raddr <= lptr_dout;
-			//	deq_node <= lptr_dout;
-			//	bram_rd <= 1'b1;
-			//	rmv_state <= RMV_WAIT_MEM_RD2;
-			//end
-
-            RMV_WAIT_MEM_RD2: // 4
+            RMV_WAIT_MEM_RD1: // 2
                 if (bram_rd1 == 1'b1)
                     rmv_state <= RMV_DEQ_NODE;
 					
-			RMV_DEQ_NODE: // 5
+			RMV_DEQ_NODE: // 3
 			begin
 			    // Send node to PIFO reg
 			    pr_rank_in <= rank_dout;
@@ -973,17 +956,17 @@ module det_skip_list
 				    bram_rd <= 1'b1;
 					rmv_node <= uptr_dout;
 					rmv_lvl <= 1;
-				    rmv_state <= RMV_WAIT_MEM_RD3;
+				    rmv_state <= RMV_WAIT_MEM_RD2;
 				end
 				else
 				    rmv_state <= RMV_IDLE;
 			end
 			
-			RMV_WAIT_MEM_RD3: // 6
+			RMV_WAIT_MEM_RD2: // 4
 			    if (bram_rd1 == 1'b1)
 				    rmv_state <= RMV_CONN_LEFT_TAIL;			
 				
-			RMV_CONN_LEFT_TAIL: // 7
+			RMV_CONN_LEFT_TAIL: // 5
 			begin
 				// Connect left neighbor to tail
 			    rptr_waddr <= lptr_dout;
@@ -1010,7 +993,7 @@ module det_skip_list
 				    bram_rd <= 1'b1;
 					rmv_node <= uptr_dout;
 					rmv_lvl <= rmv_lvl + 1;
-					rmv_state <= RMV_WAIT_MEM_RD3;
+					rmv_state <= RMV_WAIT_MEM_RD2;
 				end
 				else
 				begin
