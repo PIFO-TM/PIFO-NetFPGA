@@ -293,8 +293,8 @@ module simple_tm_sl_drop
                   end
               end
               else begin
-                      pkt_in_accepted = 0;
-                      s_axis_tvalid_storage = 0;
+                  pkt_in_accepted = 0;
+                  s_axis_tvalid_storage = 0;
               end
           end
 
@@ -342,12 +342,12 @@ module simple_tm_sl_drop
       // q_id on the input side
       curr_s_q_id = s_axis_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
       if (curr_s_q_id >= NUM_QUEUES)
-          $display("WARNING: q_id on s_axis_tuser bus packet out of allowable range, q_id = %d\n", s_q_id);
+          $display("WARNING: q_id on s_axis_tuser bus packet out of allowable range, q_id = %d\n", curr_s_q_id);
 
       // q_id on the output side
       curr_m_q_id = m_axis_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
       if (curr_m_q_id >= NUM_QUEUES)
-          $display("WARNING: q_id on m_axis_tuser bus packet out of allowable range, q_id = %d\n", s_q_id);
+          $display("WARNING: q_id on m_axis_tuser bus packet out of allowable range, q_id = %d\n", curr_m_q_id);
 
       s_q_state_next = s_q_state;
       m_q_state_next = m_q_state;
@@ -366,9 +366,9 @@ module simple_tm_sl_drop
       case(s_q_state)
           S_Q_WAIT_START: begin
               if (s_axis_tvalid & s_axis_tready) begin
+                  s_q_id = curr_s_q_id;
                   if (pkt_in_accepted) begin
                       s_q_inc_val = 1;
-                      s_q_id = curr_s_q_id;
                       s_q_id_r_next = curr_s_q_id;
                       s_q_update_size_r_next = 0;
                       s_q_state_next = S_Q_WAIT_END_ENQ;
