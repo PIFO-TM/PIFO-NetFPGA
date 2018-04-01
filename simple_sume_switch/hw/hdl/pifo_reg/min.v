@@ -21,20 +21,28 @@ module min
 	begin
 	    for (i = 0; i < REG_WIDTH; i=i+2) 
 		begin
-            if (((data_in[(i+1)*DATA_WIDTH-1 -: DATA_WIDTH] <= data_in[(i+2)*DATA_WIDTH-1 -: DATA_WIDTH]) && (vld_in[i] == 1'b1) && (vld_in[i+1] == 1'b1)) ||
-			    ((vld_in[i] == 1'b1) && (vld_in[i+1] !== 1'b1)))
+            if ((vld_in[i] == 1'b1) && (vld_in[i+1] == 1'b1))
+                if (data_in[(i+1)*DATA_WIDTH-1 -: DATA_WIDTH] <= data_in[(i+2)*DATA_WIDTH-1 -: DATA_WIDTH]) 
+		        begin
+		            min_out[((i/2)+1)*DATA_WIDTH-1 -: DATA_WIDTH] <= data_in[(i+1)*DATA_WIDTH-1 -: DATA_WIDTH];
+			        idx_out[((i/2)+1)*IDX_WIDTH-1 -: IDX_WIDTH]   <= idx_in[(i+1)*IDX_WIDTH-1 -: IDX_WIDTH];
+			    end
+		        else 
+			    begin
+	                min_out[((i/2)+1)*DATA_WIDTH-1 -: DATA_WIDTH] <= data_in[(i+2)*DATA_WIDTH-1 -: DATA_WIDTH];
+			        idx_out[((i/2)+1)*IDX_WIDTH-1 -: IDX_WIDTH]   <= idx_in[(i+2)*IDX_WIDTH-1 -: IDX_WIDTH];						
+		        end
+			else if (vld_in[i] == 1'b1) 
 		    begin
 		        min_out[((i/2)+1)*DATA_WIDTH-1 -: DATA_WIDTH] <= data_in[(i+1)*DATA_WIDTH-1 -: DATA_WIDTH];
 			    idx_out[((i/2)+1)*IDX_WIDTH-1 -: IDX_WIDTH]   <= idx_in[(i+1)*IDX_WIDTH-1 -: IDX_WIDTH];
 			end
-		    else if (((data_in[(i+1)*DATA_WIDTH-1 -: DATA_WIDTH] > data_in[(i+2)*DATA_WIDTH-1 -: DATA_WIDTH]) && (vld_in[i] == 1'b1) && (vld_in[i+1] == 1'b1)) ||
-				     ((vld_in[i] !== 1'b1) && (vld_in[i+1] == 1'b1)))
+            else
 			begin
 	            min_out[((i/2)+1)*DATA_WIDTH-1 -: DATA_WIDTH] <= data_in[(i+2)*DATA_WIDTH-1 -: DATA_WIDTH];
 			    idx_out[((i/2)+1)*IDX_WIDTH-1 -: IDX_WIDTH]   <= idx_in[(i+2)*IDX_WIDTH-1 -: IDX_WIDTH];						
-		    end
-            vld_out[i/2] <= vld_in[i+1] | vld_in[i];			
+			end
+            vld_out[i/2] <= vld_in[i] | vld_in[i+1];
 		end
 	end
-	
 endmodule
