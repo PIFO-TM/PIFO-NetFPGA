@@ -161,6 +161,8 @@ read_verilog "$::env(SUME_FOLDER)/lib/hw/std/cores/fallthrough_small_fifo_v1_0_0
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/simple_dp_bram/simple_dp_bram.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/free_list_fifo/free_list_fifo.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/pkt_storage/pifo_pkt_storage.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/pifo_reg/min.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/pifo_reg/max.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/pifo_reg/pifo_reg.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/det_skip_list/det_skip_list.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/pifo_top/pifo_top.v"
