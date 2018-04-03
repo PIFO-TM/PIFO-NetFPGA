@@ -17,7 +17,7 @@ module det_skip_list
 	output [RANK_WIDTH-1:0] rank_out,
 	output [META_WIDTH-1:0] meta_out,
 	output valid_out,
-    output [L2_MAX_SIZE:0] num_entries,
+    output reg [L2_MAX_SIZE:0] num_entries,
 	output busy,
 	output full
 );
@@ -170,6 +170,7 @@ module det_skip_list
 	reg [L2_MAX_SIZE-1:0] rmv_node;
 	wire free_nodes_avail;
 	reg first_node;
+	reg sl_blk_ins_if_rmv;
 	
 
 	assign rank_rd = 1'b1;
@@ -374,6 +375,7 @@ module det_skip_list
 			free_list_wr <= 1'b0;
 			pr_insert <= 1'b0;
 			sl_insert <= 1'b0;
+			sl_blk_ins_if_rmv <= 1'b0;
 			sl_valid_out <= 1'b0;
 			init_busy <= 1'b1;
 			ins_busy <= 1'b0;
@@ -416,6 +418,7 @@ module det_skip_list
 			search_done <= 1'b0;
 			get_next_node <= 1'b0;
 			first_node <= 1'b0;
+			sl_blk_ins_if_rmv <= 1'b0;
 			
 			bram_rd1 <= bram_rd;
 			
@@ -532,6 +535,7 @@ module det_skip_list
 							        sl_rank_in <= pr_max_rank;
 								    sl_meta_in <= pr_max_meta;
 							        sl_insert <= 1'b1;
+									sl_blk_ins_if_rmv <= 1'b1;
 							        ins_busy <= 1'b1;
 					                main_state <= INSERT;
 								end
@@ -560,6 +564,7 @@ module det_skip_list
 							        sl_rank_in <= pr_max_rank;
 								    sl_meta_in <= pr_max_meta;
 							        sl_insert <= 1'b1;
+									sl_blk_ins_if_rmv <= 1'b1;
 							        ins_busy <= 1'b1;
 						            main_state <= INSERT;
 								end
@@ -596,12 +601,18 @@ module det_skip_list
 					end
 				
 			INSERT: // 4
-			    if (insert_done == 1'b1)
+			begin
+			    // If a remove has just arrived, skip list insert will not take place
+			    if (remove == 1'b1 && sl_blk_ins_if_rmv == 1'b1)
+				    main_state <= RUN;
+					
+			    if (insert_done == 1'b1) 
 				begin
 					sl_num_entries <= sl_num_entries + 1;
 					main_state <= RUN;
 				end
-				
+			end
+			
 			default:
 			    main_state <= INIT_HEAD;
 			endcase
@@ -826,7 +837,8 @@ module det_skip_list
             INS_IDLE: 
 			begin
 			    ins_busy <= 1'b0;
-		        if (sl_insert == 1'b1)
+				// Start insert if no simultaneous remove arrived
+		        if (sl_insert == 1'b1 && (sl_blk_ins_if_rmv & remove) == 1'b0)
 				begin
 				    ins_busy <= 1'b1;
 			        start_search <= 1'b1;
@@ -1012,6 +1024,10 @@ module det_skip_list
 			    rmv_state <= RMV_IDLE;
 			endcase
 		end
+		
+	    // Output total number of entries in both PIFO register and skip list
+	    num_entries <= {{(L2_MAX_SIZE-L2_REG_WIDTH){1'b0}}, pr_num_entries} + sl_num_entries;
+		
 	end
 	
 	// Internal busy not including condition for PIFO Reg empty AND SL not empty
@@ -1019,7 +1035,7 @@ module det_skip_list
 	// External busy including (PIFO Reg empty AND SL not empty) to prevent starvation of replenishment
 	// of PIFO Reg from Skip List
 	assign busy = int_busy || (pr_empty == 1'b1 && sl_num_entries > 0) ;
-	// Out total number of entries in both PIFO register and skip list
-	assign num_entries = {{(L2_MAX_SIZE-L2_REG_WIDTH){1'b0}}, pr_num_entries} + sl_num_entries;
+	// Output total number of entries in both PIFO register and skip list
+	//assign num_entries = {{(L2_MAX_SIZE-L2_REG_WIDTH){1'b0}}, pr_num_entries} + sl_num_entries;
 	
 endmodule

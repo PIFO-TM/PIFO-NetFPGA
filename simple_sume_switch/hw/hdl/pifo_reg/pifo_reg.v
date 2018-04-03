@@ -39,9 +39,6 @@ module pifo_reg
 	wire [REG_WIDTH-1:0] max_vld[0:COMP_LVLS-1];
 	wire [IDX_WIDTH-1:0] idx;
 	wire [IDX_WIDTH-1:0] max_idx_out;
-	reg insert_ltch;
-	reg calc_min_max;
-	reg was_full;
 	integer k;
 	
     // Insert/Remove
@@ -50,18 +47,13 @@ module pifo_reg
 	    if (rst)
 		begin
 		    num_entries <= 0;
-			calc_min_max <= 0;
-			insert_ltch <= 0;
 			empty <= 1'b0;
 			full <= 1'b0;
-			was_full <= 1'b0;
 			for (k = 0; k < REG_WIDTH; k=k+1)
 				valid[k] <= 1'b0;
 		end
 		else 
 		begin
-		    calc_min_max <= 0;
-			was_full <= full;
 			
 		    if (remove == 1'b1 && num_entries > 0)
 		    begin
@@ -80,8 +72,6 @@ module pifo_reg
 				        empty <= 1'b1;
 				    full <= 1'b0;
 				    num_entries <= num_entries - 1;
-				    //calc_min_max <= 1'b1;
-				    //insert_ltch <= insert;
 				end
 				else  // Simultaneous insert/remove
 				begin
@@ -90,7 +80,6 @@ module pifo_reg
 					meta[idx] <= meta_in;
 				end
 		    end
-//		    else if (insert == 1'b1 || insert_ltch == 1'b1)
 		    else if (insert == 1'b1)
 		    begin
 			    // Insert new value at end of register
@@ -103,8 +92,7 @@ module pifo_reg
 					    full <= 1'b1;
 					else
 					    full <= 1'b0;
-					//if (insert_ltch == 1'b0 || was_full == 1'b0)
-			            num_entries <= num_entries + 1;
+			        num_entries <= num_entries + 1;
 				end
 				else
 				begin
@@ -118,36 +106,9 @@ module pifo_reg
 					full <= 1'b1;
 				end
 				empty <= 1'b0;
-			    //calc_min_max <= 1'b1;
-				//insert_ltch <= 1'b0;
 			end
 		end
 	end
-	
-	// Min/max valid generation
-    //always @(posedge clk)
-	//begin
-	//    if (rst)
-	//	begin
-	//		//valid_out <= 1'b0;
-	//		//max_valid_out <= 1'b0;
-	//	end
-	//	else
-	//	begin
-	//	    if (insert == 1'b1 || remove == 1'b1)
-	//		begin
-	//		    //valid_out <= 1'b0;
-	//			//max_valid_out <= 1'b0;
-	//		end
-    //
-	//	    if (calc_min_max == 1'b1)
-	//			if (num_entries > 0)
-	//			begin
-	//		        //valid_out <= 1'b1;
-	//				//max_valid_out <= 1'b1;
-	//			end
-	//    end
-	//end
 
 	// Connect rank array to first level of min/max trees
 	genvar i;

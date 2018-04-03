@@ -108,7 +108,7 @@ module simple_tm_sl_bp
    localparam META_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam PTRS_WIDTH = SEG_ADDR_WIDTH + META_ADDR_WIDTH;
 
-   localparam RANK_WIDTH = 32;
+   localparam RANK_WIDTH = 16; //32;
 
    //---------------------- Wires and Regs ---------------------------- 
 

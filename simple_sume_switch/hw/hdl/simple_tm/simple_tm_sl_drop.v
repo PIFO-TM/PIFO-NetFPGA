@@ -113,7 +113,7 @@ module simple_tm_sl_drop
    localparam META_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam PTRS_WIDTH = SEG_ADDR_WIDTH + META_ADDR_WIDTH;
 
-   localparam RANK_WIDTH = 32;
+   localparam RANK_WIDTH = 16; //32;
    localparam Q_ID_WIDTH = 32;
    localparam Q_SIZE_BITS = 32;
 
