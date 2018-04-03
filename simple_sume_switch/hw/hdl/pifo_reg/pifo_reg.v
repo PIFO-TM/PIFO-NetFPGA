@@ -13,12 +13,12 @@ module pifo_reg
 	input [RANK_WIDTH-1:0] rank_in,
 	input [META_WIDTH-1:0] meta_in,
     input remove,
-	output [RANK_WIDTH-1:0] rank_out,
-	output [META_WIDTH-1:0] meta_out,
+	output reg [RANK_WIDTH-1:0] rank_out,
+	output reg [META_WIDTH-1:0] meta_out,
 	output reg valid_out,
 	output [RANK_WIDTH-1:0] max_rank_out,
 	output [META_WIDTH-1:0] max_meta_out,
-	output reg max_valid_out,
+	output max_valid_out,
 	output reg [L2_REG_WIDTH:0] num_entries,
 	output reg empty,
 	output reg full
@@ -65,23 +65,33 @@ module pifo_reg
 			
 		    if (remove == 1'b1 && num_entries > 0)
 		    begin
-			    // Close gap 
-				for (k = 0; k < REG_WIDTH; k=k+1)
-				    if (k > idx)
-					begin
-				        rank[k-1] <= rank[k];
-				        meta[k-1] <= meta[k];
-						valid[k-1] <= valid[k];
-					end
-				valid[num_entries-1] <= 0;
-				if (num_entries == 1)
-				    empty <= 1'b1;
-				full <= 1'b0;
-				num_entries <= num_entries - 1;
-				calc_min_max <= 1'b1;
-				insert_ltch <= insert;
+			    if (insert == 1'b0)
+				begin
+			        // Close gap 
+				    for (k = 0; k < REG_WIDTH; k=k+1)
+				        if (k > idx)
+					    begin
+				            rank[k-1] <= rank[k];
+				            meta[k-1] <= meta[k];
+						    valid[k-1] <= valid[k];
+					    end
+				    valid[num_entries-1] <= 0;
+				    if (num_entries == 1)
+				        empty <= 1'b1;
+				    full <= 1'b0;
+				    num_entries <= num_entries - 1;
+				    //calc_min_max <= 1'b1;
+				    //insert_ltch <= insert;
+				end
+				else  // Simultaneous insert/remove
+				begin
+					// Replace min value that is being removed
+					rank[idx] <= rank_in;
+					meta[idx] <= meta_in;
+				end
 		    end
-		    else if (insert == 1'b1 || insert_ltch == 1'b1)
+//		    else if (insert == 1'b1 || insert_ltch == 1'b1)
+		    else if (insert == 1'b1)
 		    begin
 			    // Insert new value at end of register
 				if (num_entries < REG_WIDTH)
@@ -93,7 +103,7 @@ module pifo_reg
 					    full <= 1'b1;
 					else
 					    full <= 1'b0;
-					if (insert_ltch == 1'b0 || was_full == 1'b0)
+					//if (insert_ltch == 1'b0 || was_full == 1'b0)
 			            num_entries <= num_entries + 1;
 				end
 				else
@@ -108,36 +118,36 @@ module pifo_reg
 					full <= 1'b1;
 				end
 				empty <= 1'b0;
-			    calc_min_max <= 1'b1;
-				insert_ltch <= 1'b0;
+			    //calc_min_max <= 1'b1;
+				//insert_ltch <= 1'b0;
 			end
 		end
 	end
 	
 	// Min/max valid generation
-    always @(posedge clk)
-	begin
-	    if (rst)
-		begin
-			valid_out <= 1'b0;
-			max_valid_out <= 1'b0;
-		end
-		else
-		begin
-		    if (insert == 1'b1 || remove == 1'b1)
-			begin
-			    valid_out <= 1'b0;
-				max_valid_out <= 1'b0;
-			end
-
-		    if (calc_min_max == 1'b1)
-				if (num_entries > 0)
-				begin
-			        valid_out <= 1'b1;
-					max_valid_out <= 1'b1;
-				end
-	    end
-	end
+    //always @(posedge clk)
+	//begin
+	//    if (rst)
+	//	begin
+	//		//valid_out <= 1'b0;
+	//		//max_valid_out <= 1'b0;
+	//	end
+	//	else
+	//	begin
+	//	    if (insert == 1'b1 || remove == 1'b1)
+	//		begin
+	//		    //valid_out <= 1'b0;
+	//			//max_valid_out <= 1'b0;
+	//		end
+    //
+	//	    if (calc_min_max == 1'b1)
+	//			if (num_entries > 0)
+	//			begin
+	//		        //valid_out <= 1'b1;
+	//				//max_valid_out <= 1'b1;
+	//			end
+	//    end
+	//end
 
 	// Connect rank array to first level of min/max trees
 	genvar i;
@@ -194,11 +204,33 @@ module pifo_reg
     endgenerate
  
 	// Output min and max
-	assign rank_out = min_data[COMP_LVLS-1][RANK_WIDTH-1:0];
 	assign idx = min_idx[COMP_LVLS-1][IDX_WIDTH-1:0];
-	assign meta_out = meta[idx];
-	assign max_rank_out = max_data[COMP_LVLS-1][RANK_WIDTH-1:0];
 	assign max_idx_out = max_idx[COMP_LVLS-1][IDX_WIDTH-1:0];
+    always @(posedge clk)
+	begin
+	    if (rst)
+		begin
+			valid_out <= 1'b0;
+			//max_valid_out <= 1'b0;
+		end
+		else
+		begin
+	        //max_rank_out <= max_data[COMP_LVLS-1][RANK_WIDTH-1:0];
+	        //max_meta_out <= meta[max_idx_out];
+	        //max_valid_out <= max_vld[COMP_LVLS-1];
+	        rank_out <= min_data[COMP_LVLS-1][RANK_WIDTH-1:0];
+	        meta_out <= meta[idx];
+			if (insert == 1'b1 || remove == 1'b1)
+			    valid_out <= 1'b0;
+			else
+	            valid_out <= min_vld[COMP_LVLS-1];
+        end
+	end
+	assign max_rank_out = max_data[COMP_LVLS-1][RANK_WIDTH-1:0];
 	assign max_meta_out = meta[max_idx_out];
+	assign max_valid_out = max_vld[COMP_LVLS-1];
+	//assign rank_out = min_data[COMP_LVLS-1][RANK_WIDTH-1:0];
+	//assign meta_out = meta[idx];
+	//assign valid_out = min_vld[COMP_LVLS-1];
 	
 endmodule
