@@ -62,9 +62,10 @@ class TM_hw_sim(object):
             results.append(sim_res)
         self.plot_results(fill_levels, results, 'fill_level', 'lower right', 'pkts')
 
-    def run_sim(self, pifo_depth=4096, pifo_reg_depth=32, num_skip_lists=1, fill_level=2048):
+    def run_sim(self, pifo_depth=64, pifo_reg_depth=16, num_skip_lists=1, fill_level=10):
 #    def run_sim(self, pifo_depth=2048, pifo_reg_depth=32, num_skip_lists=1, fill_level=1024):
 #    def run_sim(self, pifo_depth=128, pifo_reg_depth=32, num_skip_lists=1, fill_level=1024):
+        global ERROR
         # delete any existing RESULTS_FILE
         os.system('rm -f {}'.format(RESULTS_FILE))
         # set parameters

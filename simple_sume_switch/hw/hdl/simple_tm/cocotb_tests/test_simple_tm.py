@@ -17,7 +17,7 @@ from scapy.all import Ether, IP, UDP, hexdump
 import sys, os
 import json
 
-NUM_PKTS = 40
+NUM_PKTS = 30
 
 RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000
@@ -84,8 +84,14 @@ def test_simple_tm(dut):
 
     # delay between writing pkts and reading them out
     yield ClockCycles(dut.axis_aclk, 25)
+    # wait for the pifo to finish the final enqueue 
+    yield FallingEdge(dut.axis_aclk)
+    while dut.simple_tm_inst.pifo_busy.value:
+        yield RisingEdge(dut.axis_aclk)
+        yield FallingEdge(dut.axis_aclk)
+    yield RisingEdge(dut.axis_aclk)
 
-    # Attach and AXI4StreamSlave to the output pkt interface
+    # Attach an AXI4StreamSlave to the output pkt interface
     pkt_slave = AXI4StreamSlave(dut, 'm_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT)
     pkt_out_stats = AXI4StreamStats(dut, 'm_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT)
     pkt_out_stats_thread = cocotb.fork(pkt_out_stats.record_n_delays(len(pkts_in)))

@@ -1,6 +1,8 @@
 
 TOPLEVEL_LANG = verilog
 
+#COMPILE_ARGS=-pfileline=1
+
 VIVADO_IP_DIR=$(NF_DESIGN_DIR)/hw/vivado_ip
 NETFPGA_HW_LIB=$(SUME_FOLDER)/lib/hw/std/cores
 
@@ -13,6 +15,8 @@ VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pkt_storage/pifo_pkt_storage.v
 
 # pifo source files
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_reg/pifo_reg.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_reg/min.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_reg/max.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/det_skip_list/det_skip_list.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_top/pifo_top.v
 
@@ -25,18 +29,22 @@ VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_tm/simple_tm_sl_bp.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_tm/cocotb_tests/cocotb_tm_bp_wrapper.v
 
 #### Module for testing enq followed by dequeue ####
-MODULE=test_simple_tm
+#MODULE=test_simple_tm
+#MODULE=test_const_fill
+#MODULE=test_both_enqdeq
+MODULE=test_slow_egress
 
 # ===================================== #
 
-#TOPLEVEL = cocotb_tm_drop_wrapper
-
-# top level source files -- packets are dropped
-#VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_tm/simple_tm_sl_drop.v
-#VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_tm/cocotb_tests/cocotb_tm_drop_wrapper.v
-
-#### Module for testing scheduling algorithms ####
-#MODULE=test_sched_alg
+# TOPLEVEL = cocotb_tm_drop_wrapper
+# 
+# # top level source files -- packets are dropped
+# VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_tm/simple_tm_sl_drop.v
+# VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_tm/cocotb_tests/cocotb_tm_drop_wrapper.v
+# 
+# ### Module for testing scheduling algorithms ####
+# MODULE=test_sched_alg
+# #MODULE=test_stfq
 
 include $(COCOTB)/makefiles/Makefile.inc
 include $(COCOTB)/makefiles/Makefile.sim

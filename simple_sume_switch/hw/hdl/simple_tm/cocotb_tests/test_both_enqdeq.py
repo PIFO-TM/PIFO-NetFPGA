@@ -17,8 +17,8 @@ from scapy.all import Ether, IP, UDP, hexdump
 import sys, os
 import json
 
-FILL_LEVEL = 6
-NUM_SAMPLES = 10
+FILL_LEVEL = 16
+NUM_SAMPLES = 100
 
 RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000
@@ -113,7 +113,7 @@ def test_both_enqdeq(dut):
 #        enq_delays += pkt_in_stats.delays
 #        deq_delays += pkt_out_stats.delays
         # wait a few cycles between samples
-#        yield ClockCycles(dut.axis_aclk, 30)
+        yield ClockCycles(dut.axis_aclk, 30)
         if pkt_slave.error:
             print "ERROR: pkt_slave timed out"
             break

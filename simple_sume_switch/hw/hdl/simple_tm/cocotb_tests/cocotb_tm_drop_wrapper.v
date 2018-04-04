@@ -56,9 +56,11 @@ module cocotb_tm_drop_wrapper
     parameter C_S_AXIS_TUSER_WIDTH = 128,
 
     // max num pkts the pifo can store
-    parameter PIFO_DEPTH = 16,
-    parameter PIFO_REG_DEPTH = 4,
-    parameter STORAGE_MAX_PKTS = 4096
+    parameter PIFO_DEPTH = 4096,
+    parameter PIFO_REG_DEPTH = 32,
+    parameter STORAGE_MAX_PKTS = 1024, //2048, //128,
+    parameter NUM_SKIP_LISTS = 12,
+    parameter NUM_QUEUES = 4
 )
 (
     // Global Ports
@@ -87,7 +89,9 @@ module cocotb_tm_drop_wrapper
    #(
        .PIFO_DEPTH       (PIFO_DEPTH),
        .PIFO_REG_DEPTH   (PIFO_REG_DEPTH),
-       .STORAGE_MAX_PKTS (STORAGE_MAX_PKTS)
+       .STORAGE_MAX_PKTS (STORAGE_MAX_PKTS),
+       .NUM_SKIP_LISTS   (NUM_SKIP_LISTS),
+       .NUM_QUEUES       (NUM_QUEUES)
    )
    simple_tm_inst
    (

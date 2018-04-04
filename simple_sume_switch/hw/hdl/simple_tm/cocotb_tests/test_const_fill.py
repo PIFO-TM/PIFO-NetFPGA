@@ -17,7 +17,7 @@ from scapy.all import Ether, IP, UDP, hexdump
 import sys, os
 import json
 
-FILL_LEVEL = 2048
+FILL_LEVEL = 23
 NUM_SAMPLES = 100
 
 RESULTS_FILE = 'cocotb_results.json'

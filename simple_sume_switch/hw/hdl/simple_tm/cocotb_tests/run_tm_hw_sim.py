@@ -4,12 +4,9 @@ from tm_hw_sim import TM_hw_sim
 
 OUT_DIR = 'out'
 
-def exp2(power):
-    return 2**power
-
 def test_num_skip_lists():
     tm_sim = TM_hw_sim(OUT_DIR)
-    num_skip_lists = range(1,15)
+    num_skip_lists = range(1,13)
     tm_sim.test_num_skip_lists(num_skip_lists)
 
 def test_pifo_depth():
@@ -24,15 +21,15 @@ def test_reg_depth():
 
 def test_fill_level():
     tm_sim = TM_hw_sim(OUT_DIR)
-    fill_levels = range(1, 2048, 128)
+    fill_levels = range(1, 34, 2)
     #fill_levels = range(1, 64, 4)
     tm_sim.test_fill_level(fill_levels)
 
 def main():
-    test_num_skip_lists()
+    #test_num_skip_lists()
     #test_pifo_depth()
     #test_reg_depth()
-    #test_fill_level()
+    test_fill_level()
 
 if __name__ == "__main__":
     main()
