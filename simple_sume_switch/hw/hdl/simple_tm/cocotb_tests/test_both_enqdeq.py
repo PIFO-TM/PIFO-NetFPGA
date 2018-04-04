@@ -1,7 +1,6 @@
 
 import logging
 import cocotb
-import simpy
 import random
 
 from cocotb.clock import Clock
