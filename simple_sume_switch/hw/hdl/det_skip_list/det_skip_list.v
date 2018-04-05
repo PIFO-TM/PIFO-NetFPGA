@@ -26,7 +26,10 @@ module det_skip_list
 	localparam REG_WIDTH = 2**L2_REG_WIDTH;
     localparam NUM_LVLS = L2_MAX_SIZE;
     localparam L2_NUM_LVLS = log2(NUM_LVLS) + 1;
+	localparam L2_SL_FILL_RANGES = 4;
+	localparam SL_FILL_RANGES = 12;
     localparam MAX_CONS_NODES = 3;
+	
 	function integer log2;
     input integer number;
     begin
@@ -67,6 +70,54 @@ module det_skip_list
 	           RMV_DEQ_NODE       = 3'b011,
                RMV_WAIT_MEM_RD2   = 3'b100,
                RMV_CONN_LEFT_TAIL = 3'b101;
+	
+	reg [L2_MAX_SIZE-1:0] sl_fill_lo [0:SL_FILL_RANGES-1];
+        initial begin
+            sl_fill_lo[0]  = 12'd0;
+            sl_fill_lo[1]  = 12'd1;
+            sl_fill_lo[2]  = 12'd2;
+            sl_fill_lo[3]  = 12'd4;
+            sl_fill_lo[4]  = 12'd8;
+            sl_fill_lo[5]  = 12'd16;
+            sl_fill_lo[6]  = 12'd32;
+            sl_fill_lo[7]  = 12'd64;
+            sl_fill_lo[8]  = 12'd128;
+            sl_fill_lo[9]  = 12'd256;
+            sl_fill_lo[10] = 12'd512;
+            sl_fill_lo[11] = 12'd1024;
+        end
+
+	reg [L2_MAX_SIZE-1:0] sl_fill_hi [0:SL_FILL_RANGES-1];
+        initial begin
+            sl_fill_hi[0]  = 12'd1;
+            sl_fill_hi[1]  = 12'd2;
+            sl_fill_hi[2]  = 12'd4;
+            sl_fill_hi[3]  = 12'd8;
+            sl_fill_hi[4]  = 12'd16;
+            sl_fill_hi[5]  = 12'd32;
+            sl_fill_hi[6]  = 12'd64;
+            sl_fill_hi[7]  = 12'd128;
+            sl_fill_hi[8]  = 12'd256;
+            sl_fill_hi[9]  = 12'd512;
+            sl_fill_hi[10] = 12'd1024;
+            sl_fill_hi[11] = 12'd2048;
+        end
+
+	reg [L2_MAX_SIZE-1:0] pr_fill_levels [0:SL_FILL_RANGES-1];
+        initial begin
+            pr_fill_levels[0]  = 12'd0;
+            pr_fill_levels[1]  = 12'd1;
+            pr_fill_levels[2]  = 12'd2;
+            pr_fill_levels[3]  = 12'd3;
+            pr_fill_levels[4]  = 12'd4;
+            pr_fill_levels[5]  = 12'd5;
+            pr_fill_levels[6]  = 12'd6;
+            pr_fill_levels[7]  = 12'd7;
+            pr_fill_levels[8]  = 12'd8;
+            pr_fill_levels[9]  = 12'd9;
+            pr_fill_levels[10] = 12'd10;
+            pr_fill_levels[11] = 12'd11;
+        end
 	
 	localparam MIN_RANK = {RANK_WIDTH{1'b0}};
 	localparam MAX_RANK = {RANK_WIDTH{1'b1}};
@@ -171,7 +222,12 @@ module det_skip_list
 	wire free_nodes_avail;
 	reg first_node;
 	reg sl_blk_ins_if_rmv;
+	reg [L2_SL_FILL_RANGES-1:0] sl_fill_idx;
+    reg [L2_MAX_SIZE-1:0] pr_fill_thresh;
+	reg pr_fill_busy;
 	
+	integer i;
+
 
 	assign rank_rd = 1'b1;
 	
@@ -397,6 +453,7 @@ module det_skip_list
 			get_next_node <= 1'b0;
 			store_d <= 1'b0;
 			first_node <= 1'b0;
+			pr_fill_busy <= 1'b0;
 			
 		end
 		else
@@ -1028,13 +1085,26 @@ module det_skip_list
 	    // Output total number of entries in both PIFO register and skip list
 	    num_entries <= {{(L2_MAX_SIZE-L2_REG_WIDTH){1'b0}}, pr_num_entries} + sl_num_entries;
 		
+	    for (i = 0; i < SL_FILL_RANGES; i=i+1) 			
+            if (sl_num_entries >= sl_fill_lo[i] && sl_num_entries < sl_fill_hi[i])
+			    //sl_fill_idx <= i;
+                pr_fill_thresh <= pr_fill_levels[i];
+			//else
+            //    pr_fill_thresh <= 0;
+				
+		if (pr_num_entries < pr_fill_thresh)
+		    pr_fill_busy <= 1'b1;
+		else
+		    pr_fill_busy <= 1'b0;
+		
 	end
+	
 	
 	// Internal busy not including condition for PIFO Reg empty AND SL not empty
 	assign int_busy = init_busy | ins_busy | rmv_busy;
 	// External busy including (PIFO Reg empty AND SL not empty) to prevent starvation of replenishment
 	// of PIFO Reg from Skip List
-	assign busy = int_busy || (pr_empty == 1'b1 && sl_num_entries > 0) ;
+	assign busy = int_busy | pr_fill_busy;
 	// Output total number of entries in both PIFO register and skip list
 	//assign num_entries = {{(L2_MAX_SIZE-L2_REG_WIDTH){1'b0}}, pr_num_entries} + sl_num_entries;
 	
