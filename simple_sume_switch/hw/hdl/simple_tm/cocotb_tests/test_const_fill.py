@@ -4,7 +4,7 @@ import cocotb
 import random
 
 from cocotb.clock import Clock
-from cocotb.triggers import Timer, ReadOnly, RisingEdge, ClockCycles
+from cocotb.triggers import Timer, ReadOnly, RisingEdge, ClockCycles, FallingEdge
 from cocotb.binary import BinaryValue
 from cocotb.axi4stream import AXI4StreamMaster, AXI4StreamSlave, AXI4StreamStats
 from cocotb.result import TestFailure
@@ -16,7 +16,7 @@ from scapy.all import Ether, IP, UDP, hexdump
 import sys, os
 import json
 
-FILL_LEVEL = 23
+FILL_LEVEL = 30
 NUM_SAMPLES = 100
 
 RESULTS_FILE = 'cocotb_results.json'
@@ -58,6 +58,13 @@ def test_const_fill(dut):
     yield ClockCycles(dut.axis_aclk, 10)
     dut.axis_resetn <= 1
     dut._log.debug("Out of reset")
+
+    # wait for the pifo to finish resetting
+    yield FallingEdge(dut.axis_aclk)
+    while dut.simple_tm_inst.pifo_busy.value:
+        yield RisingEdge(dut.axis_aclk)
+        yield FallingEdge(dut.axis_aclk)
+    yield RisingEdge(dut.axis_aclk)
 
     yield ClockCycles(dut.axis_aclk, 100)
     dut.m_axis_tready <= 0
