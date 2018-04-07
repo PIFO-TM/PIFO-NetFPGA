@@ -70,8 +70,8 @@ module det_skip_list
 	           RMV_DEQ_NODE       = 3'b011,
                RMV_WAIT_MEM_RD2   = 3'b100,
                RMV_CONN_LEFT_TAIL = 3'b101;
-	
-	reg [L2_MAX_SIZE-1:0] sl_fill_lo [0:SL_FILL_RANGES-1];
+
+       reg [L2_MAX_SIZE-1:0] sl_fill_lo [0:SL_FILL_RANGES-1];
         initial begin
             sl_fill_lo[0]  = 12'd0;
             sl_fill_lo[1]  = 12'd1;
@@ -87,7 +87,7 @@ module det_skip_list
             sl_fill_lo[11] = 12'd1024;
         end
 
-	reg [L2_MAX_SIZE-1:0] sl_fill_hi [0:SL_FILL_RANGES-1];
+       reg [L2_MAX_SIZE-1:0] sl_fill_hi [0:SL_FILL_RANGES-1];
         initial begin
             sl_fill_hi[0]  = 12'd1;
             sl_fill_hi[1]  = 12'd2;
@@ -103,7 +103,7 @@ module det_skip_list
             sl_fill_hi[11] = 12'd2048;
         end
 
-	reg [L2_MAX_SIZE-1:0] pr_fill_levels [0:SL_FILL_RANGES-1];
+       reg [L2_MAX_SIZE-1:0] pr_fill_levels [0:SL_FILL_RANGES-1];
         initial begin
             pr_fill_levels[0]  = 12'd0;
             pr_fill_levels[1]  = 12'd1;
@@ -135,7 +135,6 @@ module det_skip_list
 	reg [META_WIDTH-1:0] pr_meta_in;
 	reg [RANK_WIDTH-1:0] sl_rank_in;
 	reg [META_WIDTH-1:0] sl_meta_in;
-	reg sl_valid_out;
 	reg [RANK_WIDTH-1:0] search_rank;
     reg [L2_NUM_LVLS-1:0] curr_max_lvl;
 	reg [L2_MAX_SIZE-1:0] head [0:NUM_LVLS-1];
@@ -432,7 +431,6 @@ module det_skip_list
 			pr_insert <= 1'b0;
 			sl_insert <= 1'b0;
 			sl_blk_ins_if_rmv <= 1'b0;
-			sl_valid_out <= 1'b0;
 			init_busy <= 1'b1;
 			ins_busy <= 1'b0;
 			rmv_busy <= 1'b0;
@@ -461,7 +459,6 @@ module det_skip_list
 		    free_list_wr <= 1'b0;
 			pr_insert <= 1'b0;
 			sl_insert <= 1'b0;
-			sl_valid_out <= 1'b0;
 			rank_wr <= 1'b0;
 			meta_wr <= 1'b0;
 			lvl_wr <= 1'b0;
@@ -999,16 +996,17 @@ module det_skip_list
 			    pr_rank_in <= rank_dout;
 				pr_meta_in <= meta_dout;
 				pr_insert <= 1'b1;
-				sl_valid_out <= 1'b1;
 				// Connect left neighbor to tail
 			    rptr_waddr <= lptr_dout;
 			    rptr_din <= tail[0];
 				rptr_wr <= 1'b1;
+                // Update head rptr register if the last node was removed from this level
+				if (lptr_dout == head[0])
+				    rptr_head[0] <= tail[0];
 				lptr_waddr <= tail[0];
 				lptr_din <= lptr_dout;
 				lptr_wr <= 1'b1;
 				lptr_tail <= lptr_dout;
-
 				// Clear dequeued node
 				// No need to clear right/left pointers since they're always overwritten on insert
 				uptr_waddr <= deq_node;
@@ -1045,6 +1043,9 @@ module det_skip_list
 			    rptr_waddr <= lptr_dout;
 			    rptr_din <= tail[rmv_lvl];
 				rptr_wr <= 1'b1;
+                // Update head rptr register if the last node was removed from this level
+				if (lptr_dout == head[rmv_lvl])
+				    rptr_head[rmv_lvl] <= tail[rmv_lvl];
 				lptr_waddr <= tail[rmv_lvl];
 				lptr_din <= lptr_dout;
 				lptr_wr <= 1'b1;
@@ -1087,10 +1088,7 @@ module det_skip_list
 		
 	    for (i = 0; i < SL_FILL_RANGES; i=i+1) 			
             if (sl_num_entries >= sl_fill_lo[i] && sl_num_entries < sl_fill_hi[i])
-			    //sl_fill_idx <= i;
                 pr_fill_thresh <= pr_fill_levels[i];
-			//else
-            //    pr_fill_thresh <= 0;
 				
 		if (pr_num_entries < pr_fill_thresh)
 		    pr_fill_busy <= 1'b1;
