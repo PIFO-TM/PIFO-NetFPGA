@@ -119,6 +119,16 @@ module det_skip_list
             pr_fill_levels[11] = 12'd11;
         end
 	
+//	localparam [L2_MAX_SIZE-1:0] sl_fill_lo [0:SL_FILL_RANGES-1] =
+//    '{0, 1, 2, 4,  8, 16, 32,  64, 128, 256,  512, 1024
+//    };
+//	localparam [L2_MAX_SIZE-1:0] sl_fill_hi [0:SL_FILL_RANGES-1] =
+//    '{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+//    };
+//	localparam [L2_MAX_SIZE-1:0] pr_fill_levels [0:SL_FILL_RANGES-1] =
+//    '{0, 1, 2, 3,  4,  5,  6,   7,   8,   9,   10,   11
+//    };
+	
 	localparam MIN_RANK = {RANK_WIDTH{1'b0}};
 	localparam MAX_RANK = {RANK_WIDTH{1'b1}};
 
@@ -126,6 +136,7 @@ module det_skip_list
 	reg [L2_MAX_SIZE-1:0] free_list_din;
     reg start_search;
 	reg pr_insert;
+	reg pr_insert_d1;
 	reg sl_insert;
 	reg init_busy;
 	reg ins_busy;
@@ -429,6 +440,7 @@ module det_skip_list
 			node_cntr <= {L2_MAX_SIZE{1'b0}};
 			free_list_wr <= 1'b0;
 			pr_insert <= 1'b0;
+			pr_insert_d1 <= 1'b0;
 			sl_insert <= 1'b0;
 			sl_blk_ins_if_rmv <= 1'b0;
 			init_busy <= 1'b1;
@@ -474,7 +486,8 @@ module det_skip_list
 			first_node <= 1'b0;
 			sl_blk_ins_if_rmv <= 1'b0;
 			
-			bram_rd1 <= bram_rd;
+			bram_rd1     <= bram_rd;
+			pr_insert_d1 <= pr_insert;
 			
 		    case (main_state)
 			INIT_HEAD: // 0
@@ -1098,8 +1111,9 @@ module det_skip_list
 	end
 	
 	
-	// Internal busy not including condition for PIFO Reg empty AND SL not empty
-	assign int_busy = init_busy | ins_busy | rmv_busy;
+	// Internal busy not including throttling
+	// pr_insert_d1 asserts busy for one clock cycle after an insertion into the PIFO reg to allow time for pr_max_rank to be valid
+	assign int_busy = init_busy | ins_busy | pr_insert_d1 | rmv_busy;
 	// External busy including (PIFO Reg empty AND SL not empty) to prevent starvation of replenishment
 	// of PIFO Reg from Skip List
 	assign busy = int_busy | pr_fill_busy;

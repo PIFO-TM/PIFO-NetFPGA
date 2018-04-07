@@ -16,9 +16,9 @@ module pifo_reg
 	output reg [RANK_WIDTH-1:0] rank_out,
 	output [META_WIDTH-1:0] meta_out,
 	output reg valid_out,
-	output [RANK_WIDTH-1:0] max_rank_out,
+	output reg [RANK_WIDTH-1:0] max_rank_out,
 	output [META_WIDTH-1:0] max_meta_out,
-	output max_valid_out,
+	output reg max_valid_out,
 	output reg [L2_REG_WIDTH:0] num_entries,
 	output reg empty,
 	output reg full
@@ -38,7 +38,7 @@ module pifo_reg
 	wire [REG_WIDTH*IDX_WIDTH-1:0] max_idx[0:COMP_LVLS-1];
 	wire [REG_WIDTH-1:0] max_vld[0:COMP_LVLS-1];
 	reg  [IDX_WIDTH-1:0] idx;
-	wire [IDX_WIDTH-1:0] max_idx_out;
+	reg [IDX_WIDTH-1:0] max_idx_out;
 	integer k;
 	
     // Insert/Remove
@@ -166,32 +166,38 @@ module pifo_reg
  
 	// Output min and max
 	//assign idx = min_idx[COMP_LVLS-1][IDX_WIDTH-1:0];
-	assign max_idx_out = max_idx[COMP_LVLS-1][IDX_WIDTH-1:0];
+	//assign max_idx_out = max_idx[COMP_LVLS-1][IDX_WIDTH-1:0];
     always @(posedge clk)
 	begin
 	    if (rst)
 		begin
 			valid_out <= 1'b0;
-			//max_valid_out <= 1'b0;
+			max_valid_out <= 1'b0;
 		end
 		else
 		begin
-	        //max_rank_out <= max_data[COMP_LVLS-1][RANK_WIDTH-1:0];
+	        max_rank_out <= max_data[COMP_LVLS-1][RANK_WIDTH-1:0];
 	        //max_meta_out <= meta[max_idx_out];
-	        //max_valid_out <= max_vld[COMP_LVLS-1];
+	        max_idx_out <= max_idx[COMP_LVLS-1][IDX_WIDTH-1:0];
 	        rank_out <= min_data[COMP_LVLS-1][RANK_WIDTH-1:0];
 	        idx <= min_idx[COMP_LVLS-1][IDX_WIDTH-1:0];
 	        //meta_out <= meta[idx];
 			if (insert == 1'b1 || remove == 1'b1)
+			begin
 			    valid_out <= 1'b0;
+				max_valid_out <= 1'b0;
+			end
 			else
+			begin
 	            valid_out <= min_vld[COMP_LVLS-1];
+	            max_valid_out <= max_vld[COMP_LVLS-1];
+			end
         end
 	end
 	assign meta_out = meta[idx];
-	assign max_rank_out = max_data[COMP_LVLS-1][RANK_WIDTH-1:0];
+	//assign max_rank_out = max_data[COMP_LVLS-1][RANK_WIDTH-1:0];
 	assign max_meta_out = meta[max_idx_out];
-	assign max_valid_out = max_vld[COMP_LVLS-1];
+	//assign max_valid_out = max_vld[COMP_LVLS-1];
 	//assign rank_out = min_data[COMP_LVLS-1][RANK_WIDTH-1:0];
 	//assign meta_out = meta[idx];
 	//assign valid_out = min_vld[COMP_LVLS-1];
