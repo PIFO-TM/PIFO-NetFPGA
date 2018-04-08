@@ -68,8 +68,9 @@ module pifo_top
     reg [TSTAMP_BITS-1:0]      tstamp_out_lvls   [NUM_LEVELS:0] [(2**NUM_LEVELS)-1:0];
     reg [L2_NUM_SL_FLOOR:0]    deq_sl_sel        [NUM_LEVELS:0] [(2**NUM_LEVELS)-1:0];
 
-    reg                       final_deq_sel_valid;
-    reg [L2_NUM_SL_FLOOR:0]   final_deq_sel_sl;
+    reg                       final_deq_sel_valid_r, final_deq_sel_valid_r_next;
+    reg [L2_NUM_SL_FLOOR:0]   final_deq_sel_sl_r;
+    reg [L2_NUM_SL_FLOOR:0]   final_deq_sel_sl_r_next;
     reg [NUM_SKIP_LISTS-1:0]  val_or_empty;
     reg                       deq_condition;
 
@@ -268,15 +269,26 @@ module pifo_top
         deq_condition = &val_or_empty;
         // the output is valid if the selected skip list is asserting valid_out
         //    and all skip lists are either empty or asserting valid_out
-        final_deq_sel_valid = valid_out_lvls[NUM_LEVELS][0] & deq_condition;
-        final_deq_sel_sl = deq_sl_sel[NUM_LEVELS][0];
+        final_deq_sel_valid_r_next = valid_out_lvls[NUM_LEVELS][0] & deq_condition;
+        final_deq_sel_sl_r_next = deq_sl_sel[NUM_LEVELS][0];
 
+    end
+
+    always @(posedge clk) begin
+        if (rst) begin
+            final_deq_sel_valid_r <= 0;
+            final_deq_sel_sl_r <= 0;
+        end
+        else begin
+            final_deq_sel_valid_r <= final_deq_sel_valid_r_next;
+            final_deq_sel_sl_r <= final_deq_sel_sl_r_next;
+        end
     end
 
     /* Removal logic: register the outputs and submit removal request */
     integer v;
     always @(*) begin
-        valid_out = final_deq_sel_valid; //valid_out_r;
+        valid_out = final_deq_sel_valid_r; //valid_out_r;
         rank_out = 0; //rank_out_r;
         meta_out = 0; //meta_out_r;
 
@@ -285,7 +297,7 @@ module pifo_top
 //        meta_out_r_next = 0;
 
         for (v=0; v<NUM_SKIP_LISTS; v=v+1) begin
-            if (final_deq_sel_valid && v == final_deq_sel_sl) begin
+            if (final_deq_sel_valid_r && v == final_deq_sel_sl_r) begin
                 sl_remove[v] = remove;
 
                 rank_out = sl_rank_out[v];
@@ -300,19 +312,6 @@ module pifo_top
             end
         end
     end
-
-//    always @(posedge clk) begin
-//        if (rst) begin
-//            valid_out_r <= 0;
-//            rank_out_r <= 0;
-//            meta_out_r <= 0;
-//        end
-//        else begin
-//            valid_out_r <= valid_out_r_next;
-//            rank_out_r <= rank_out_r_next; 
-//            meta_out_r <= meta_out_r_next;
-//        end
-//    end
 
 //wire [(2**NUM_LEVELS)-1:0] valid_out_lvls_0 = valid_out_lvls[0];
 //wire [(2**NUM_LEVELS)-1:0] valid_out_lvls_1 = valid_out_lvls[1];
