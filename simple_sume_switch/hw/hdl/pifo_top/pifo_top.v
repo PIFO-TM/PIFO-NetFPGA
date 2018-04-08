@@ -37,7 +37,8 @@ module pifo_top
     localparam NUM_LEVELS = L2_NUM_SL_FLOOR + 1;
 
     localparam TSTAMP_BITS = 32;
-    localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE - log2(NUM_SKIP_LISTS); // + 1;
+    localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE - log2(NUM_SKIP_LISTS) + 1;
+//    localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE;
 
     /*------------ Wires and Regs ------------*/
     reg [NUM_SKIP_LISTS-1:0]            sl_insert;
