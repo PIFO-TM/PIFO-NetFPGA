@@ -36,6 +36,10 @@ module pifo_top
     localparam L2_NUM_SL_FLOOR = log2(NUM_SKIP_LISTS);
     localparam NUM_LEVELS = L2_NUM_SL_FLOOR + 1;
 
+    localparam L2_IFSM_STATES = 1;
+    localparam IDLE         = 0;
+    localparam WRITE_INSERT = 1;
+
     localparam TSTAMP_BITS = 32;
     localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE - log2(NUM_SKIP_LISTS) + 1;
 //    localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE;
@@ -57,10 +61,19 @@ module pifo_top
     reg [L2_MAX_SIZE-1:0]        sl_num_entries_lvls  [NUM_LEVELS:0] [(2**NUM_LEVELS)-1:0];
     reg [L2_NUM_SL_FLOOR:0]      skip_list_sel        [NUM_LEVELS:0] [(2**NUM_LEVELS)-1:0];
  
-    reg                     final_sel_valid;
-    reg [L2_NUM_SL_FLOOR:0] final_sel_skip_list;
+    reg                     final_sel_valid, final_sel_valid_r, final_sel_valid_r_next;
+    reg [L2_NUM_SL_FLOOR:0] final_sel_skip_list, final_sel_skip_list_r, final_sel_skip_list_r_next;
+
+    reg rank_out_ifsm_valid;
+    reg [RANK_WIDTH-1:0] rank_out_ifsm;
+    reg [META_WIDTH-1:0] meta_out_ifsm;
 
     reg [TSTAMP_BITS-1:0] tstamp_r;
+
+    reg [L2_IFSM_STATES-1:0] ifsm_state, ifsm_state_next;
+    reg                      insert_r, insert_r_next;
+    reg [RANK_WIDTH-1:0]     rank_in_r, rank_in_r_next;
+    reg [META_WIDTH-1:0]     meta_in_r, meta_in_r_next;
 
     // removal selection signals
     reg [(2**NUM_LEVELS)-1:0]  valid_out_lvls    [NUM_LEVELS:0];
@@ -74,10 +87,11 @@ module pifo_top
     reg [NUM_SKIP_LISTS-1:0]  val_or_empty;
     reg                       deq_condition;
 
-//    // output regs
-//    reg valid_out_r, valid_out_r_next;
-//    reg [RANK_WIDTH-1:0] rank_out_r, rank_out_r_next;
-//    reg [META_WIDTH-1:0] meta_out_r, meta_out_r_next;
+    reg rank_out_from_sl_valid;
+    reg [RANK_WIDTH-1:0] rank_out_from_sl;
+    reg [META_WIDTH-1:0] meta_out_from_sl;
+    reg ifsm_rank_removed;
+
 
     /*------------ Modules and Logic ------------*/
 
@@ -158,33 +172,105 @@ module pifo_top
             end
         end
  
-        final_sel_valid = sl_valid_lvls[NUM_LEVELS][0];
-        final_sel_skip_list = skip_list_sel[NUM_LEVELS][0];
+        final_sel_valid_r_next = sl_valid_lvls[NUM_LEVELS][0];
+        final_sel_skip_list_r_next = skip_list_sel[NUM_LEVELS][0];
  
+    end
+
+    // increment timestamp counter
+    always @(posedge clk) begin
+        if (rst) begin
+            final_sel_valid_r <= 0;
+            final_sel_skip_list_r <= 0;
+        end
+        else begin
+            final_sel_valid_r <= final_sel_valid_r_next;
+            final_sel_skip_list_r <= final_sel_skip_list_r_next;
+        end
     end
 
     /* Insertion Logic: Writes input requests into the (available) skip list with the min # entries */
     integer p;
     always @(*) begin
-        // TODO: do we need to register the skip list inputs?
+        // default values
+        ifsm_state_next = ifsm_state;
+
+        full = &sl_full_out;
+
+        insert_r_next = insert_r;
+        rank_in_r_next = rank_in_r;
+        meta_in_r_next = meta_in_r;
+
+
         for (p=0; p<NUM_SKIP_LISTS; p=p+1) begin
-            if (final_sel_valid && p == final_sel_skip_list) begin
-                sl_insert[p] = insert;
-                sl_rank_in[p] = rank_in;
-                sl_meta_in[p] = {meta_in, tstamp_r};
-            end
-            else begin
-                sl_insert[p] = 0;
-                sl_rank_in[p] = 0;
-                sl_meta_in[p] = 0;
-            end
+            sl_insert[p] = 0;
+            sl_rank_in[p] = 0;
+            sl_meta_in[p] = 0;
         end
+
+        case (ifsm_state)
+            IDLE: begin
+                // choose the skip list to insert into and register selection
+                rank_out_ifsm_valid = 0;
+                rank_out_ifsm = 0;
+                meta_out_ifsm = 0;
+                busy = ~final_sel_valid_r_next;
+                if (insert) begin
+                    // register inputs
+                    insert_r_next = insert;
+                    rank_in_r_next = rank_in;
+                    meta_in_r_next = meta_in;
+                    ifsm_state_next = WRITE_INSERT;
+                end
+            end
+
+            WRITE_INSERT: begin
+                // continue attempting to perform the insertion until busy on the selected skip list is deasserted
+                busy = 1;
+                rank_out_ifsm_valid = 1;
+                rank_out_ifsm = rank_in_r;
+                meta_out_ifsm = meta_in_r;
+
+                if (ifsm_rank_removed) begin
+                    // no longer need to perform insertion
+                    ifsm_state_next = IDLE;
+                end
+                else begin
+                    for (p=0; p<NUM_SKIP_LISTS; p=p+1) begin
+                        if (final_sel_valid_r && p == final_sel_skip_list_r && sl_busy_out[p] == 0 && sl_full_out[p] == 0) begin
+                            sl_insert[p] = insert_r;
+                            sl_rank_in[p] = rank_in_r;
+                            sl_meta_in[p] = {meta_in_r, tstamp_r};
+                            ifsm_state_next = IDLE;
+                        end
+                        else begin
+                            sl_insert[p] = 0;
+                            sl_rank_in[p] = 0;
+                            sl_meta_in[p] = 0;
+//                            ifsm_state_next = WRITE_INSERT;
+                        end
+                    end
+//                    rank_inserted = |sl_insert;
+//                    ifsm_state_next = (rank_inserted) ? IDLE : WRITE_INSERT;
+                end
+            end
+        endcase 
     end
 
-    // generate the busy and fill signals 
-    always @(*) begin
-        busy = ~final_sel_valid;
-        full = &sl_full_out;
+    // ifsm state update 
+    always @(posedge clk) begin
+        if (rst) begin
+            ifsm_state <= IDLE;
+            insert_r <= 0;
+            rank_in_r <= 0;
+            meta_in_r <= 0;
+        end
+        else begin
+            ifsm_state <= ifsm_state_next;
+            insert_r <= insert_r_next;
+            rank_in_r <= rank_in_r_next;
+            meta_in_r <= meta_in_r_next;
+        end
     end
 
     // increment timestamp counter 
@@ -289,23 +375,17 @@ module pifo_top
     integer v;
     always @(*) begin
         valid_out = final_deq_sel_valid_r; //valid_out_r;
-        rank_out = 0; //rank_out_r;
-        meta_out = 0; //meta_out_r;
 
-//        valid_out_r_next = 0;
-//        rank_out_r_next = 0;
-//        meta_out_r_next = 0;
+        rank_out_from_sl_valid = final_deq_sel_valid_r;
+        rank_out_from_sl = 0;
+        meta_out_from_sl = 0;
 
         for (v=0; v<NUM_SKIP_LISTS; v=v+1) begin
             if (final_deq_sel_valid_r && v == final_deq_sel_sl_r) begin
-                sl_remove[v] = remove;
+                sl_remove[v] = remove & ~ifsm_rank_removed;
 
-                rank_out = sl_rank_out[v];
-                meta_out = sl_meta_out[v][META_WIDTH+TSTAMP_BITS-1 : TSTAMP_BITS];
-
-//                valid_out_r_next = 1;
-//                rank_out_r_next = sl_rank_out[v];
-//                meta_out_r_next = sl_meta_out[v][META_WIDTH+TSTAMP_BITS-1 : TSTAMP_BITS];
+                rank_out_from_sl = sl_rank_out[v];
+                meta_out_from_sl = sl_meta_out[v][META_WIDTH+TSTAMP_BITS-1 : TSTAMP_BITS];
             end
             else begin
                 sl_remove[v] = 0;
@@ -313,41 +393,43 @@ module pifo_top
         end
     end
 
-//wire [(2**NUM_LEVELS)-1:0] valid_out_lvls_0 = valid_out_lvls[0];
-//wire [(2**NUM_LEVELS)-1:0] valid_out_lvls_1 = valid_out_lvls[1];
-//wire [(2**NUM_LEVELS)-1:0] valid_out_lvls_2 = valid_out_lvls[2];
-//
-//wire [RANK_WIDTH-1:0] rank_out_lvls_0_0 = rank_out_lvls[0][0];
-//wire [RANK_WIDTH-1:0] rank_out_lvls_0_1 = rank_out_lvls[0][1];
-//wire [RANK_WIDTH-1:0] rank_out_lvls_0_2 = rank_out_lvls[0][2];
-//wire [RANK_WIDTH-1:0] rank_out_lvls_0_3 = rank_out_lvls[0][3];
-//wire [RANK_WIDTH-1:0] rank_out_lvls_1_0 = rank_out_lvls[1][0];
-//wire [RANK_WIDTH-1:0] rank_out_lvls_1_1 = rank_out_lvls[1][1];
-//wire [RANK_WIDTH-1:0] rank_out_lvls_2_0 = rank_out_lvls[2][0];
-//
-//wire [L2_NUM_SL_FLOOR:0] deq_sl_sel_0_0 = deq_sl_sel[0][0];
-//wire [L2_NUM_SL_FLOOR:0] deq_sl_sel_0_1 = deq_sl_sel[0][1];
-//wire [L2_NUM_SL_FLOOR:0] deq_sl_sel_0_2 = deq_sl_sel[0][2];
-//wire [L2_NUM_SL_FLOOR:0] deq_sl_sel_0_3 = deq_sl_sel[0][3];
-//wire [L2_NUM_SL_FLOOR:0] deq_sl_sel_1_0 = deq_sl_sel[1][0];
-//wire [L2_NUM_SL_FLOOR:0] deq_sl_sel_1_1 = deq_sl_sel[1][1];
-//wire [L2_NUM_SL_FLOOR:0] deq_sl_sel_2_0 = deq_sl_sel[2][0];
-//
-//wire [L2_MAX_SIZE-1:0] sl_num_entries_lvls_0_0 = sl_num_entries_lvls[0][0];
-//wire [L2_MAX_SIZE-1:0] sl_num_entries_lvls_0_1 = sl_num_entries_lvls[0][1];
-//wire [L2_MAX_SIZE-1:0] sl_num_entries_lvls_0_2 = sl_num_entries_lvls[0][2];
-//wire [L2_MAX_SIZE-1:0] sl_num_entries_lvls_0_3 = sl_num_entries_lvls[0][3];
-//wire [L2_MAX_SIZE-1:0] sl_num_entries_lvls_1_0 = sl_num_entries_lvls[1][0];
-//wire [L2_MAX_SIZE-1:0] sl_num_entries_lvls_1_1 = sl_num_entries_lvls[1][1];
-//wire [L2_MAX_SIZE-1:0] sl_num_entries_lvls_2_0 = sl_num_entries_lvls[2][0];
-//
-//wire [L2_NUM_SL_FLOOR:0] skip_list_sel_0_0 = skip_list_sel[0][0];
-//wire [L2_NUM_SL_FLOOR:0] skip_list_sel_0_1 = skip_list_sel[0][1];
-//wire [L2_NUM_SL_FLOOR:0] skip_list_sel_0_2 = skip_list_sel[0][2];
-//wire [L2_NUM_SL_FLOOR:0] skip_list_sel_0_3 = skip_list_sel[0][3];
-//wire [L2_NUM_SL_FLOOR:0] skip_list_sel_1_0 = skip_list_sel[1][0];
-//wire [L2_NUM_SL_FLOOR:0] skip_list_sel_1_1 = skip_list_sel[1][1];
-//wire [L2_NUM_SL_FLOOR:0] skip_list_sel_2_0 = skip_list_sel[2][0];
+
+    /* Logic to drive output and ifsm_rank_removed */
+    always @(*) begin
+        if (remove) begin
+            if (rank_out_from_sl_valid & rank_out_ifsm_valid) begin
+                // both are valid
+                if (rank_out_ifsm < rank_out_from_sl) begin
+                    rank_out = rank_out_ifsm;
+                    meta_out = meta_out_ifsm;
+                    ifsm_rank_removed = 1;
+                end
+                else begin
+                    rank_out = rank_out_from_sl;
+                    meta_out = meta_out_from_sl;
+                    ifsm_rank_removed = 0;
+                end
+            end
+            else if (rank_out_ifsm_valid) begin
+                // only ifsm insertion is valid
+                rank_out = rank_out_ifsm;
+                meta_out = meta_out_ifsm;
+                ifsm_rank_removed = 1;
+            end
+            else begin
+                // default
+                rank_out = rank_out_from_sl;
+                meta_out = meta_out_from_sl;
+                ifsm_rank_removed = 0;
+            end
+        end
+        else begin
+            rank_out = 0;
+            meta_out = 0;
+            ifsm_rank_removed = 0;
+        end
+    end
+
 
 wire [RANK_WIDTH-1:0]               sl_rank_in_0  =  sl_rank_in[0];
 wire [META_WIDTH+TSTAMP_BITS-1:0]   sl_meta_in_0  =  sl_meta_in[0];
