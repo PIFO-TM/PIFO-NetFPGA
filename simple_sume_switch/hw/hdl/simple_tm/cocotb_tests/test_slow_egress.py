@@ -95,6 +95,7 @@ def test_slow_egress(dut):
     # wait a few cycles between samples
     for i in range(10):
         yield FallingEdge(dut.axis_aclk)
+    yield RisingEdge(dut.axis_aclk)
 
 
     expected_ranks = []
