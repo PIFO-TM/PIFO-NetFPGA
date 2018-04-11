@@ -352,7 +352,7 @@ module pifo_top
         deq_condition = &val_or_empty;
         // the output is valid if the selected skip list is asserting valid_out
         //    and all skip lists are either empty or asserting valid_out
-        final_deq_sel_valid_r_next = valid_out_lvls[NUM_LEVELS][0] & deq_condition;
+        final_deq_sel_valid_r_next = |sl_valid_out & deq_condition;
         final_deq_sel_sl_r_next = deq_sl_sel[NUM_LEVELS][0];
 
     end
