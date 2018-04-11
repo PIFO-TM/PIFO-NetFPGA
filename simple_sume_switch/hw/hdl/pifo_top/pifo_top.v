@@ -247,11 +247,8 @@ module pifo_top
                             sl_insert[p] = 0;
                             sl_rank_in[p] = 0;
                             sl_meta_in[p] = 0;
-//                            ifsm_state_next = WRITE_INSERT;
                         end
                     end
-//                    rank_inserted = |sl_insert;
-//                    ifsm_state_next = (rank_inserted) ? IDLE : WRITE_INSERT;
                 end
             end
         endcase 
@@ -374,7 +371,7 @@ module pifo_top
     /* Removal logic: register the outputs and submit removal request */
     integer v;
     always @(*) begin
-        valid_out = final_deq_sel_valid_r; //valid_out_r;
+        valid_out = final_deq_sel_valid_r_next & final_deq_sel_valid_r;
 
         rank_out_from_sl_valid = final_deq_sel_valid_r;
         rank_out_from_sl = 0;
