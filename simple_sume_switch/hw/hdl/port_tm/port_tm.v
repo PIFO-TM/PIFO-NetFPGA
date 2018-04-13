@@ -65,9 +65,11 @@ module port_tm
     parameter NUM_PORTS            = 2**L2_NUM_PORTS,
     parameter RANK_WIDTH           = 32,
     // max num pkts the pifo can store
-    parameter PIFO_DEPTH           = 16,
+    parameter PIFO_DEPTH           = 1024,
+    parameter PIFO_REG_DEPTH       = 32,
     // max # 64B pkts that can fit in storage
-    parameter STORAGE_MAX_PKTS     = 4096
+    parameter STORAGE_MAX_PKTS     = 2048,
+    parameter NUM_SKIP_LISTS       = 1
 )
 (
     // Global Ports
@@ -87,7 +89,7 @@ module port_tm
     input [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_tkeep,
     input [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_tuser,
     input                                          s_axis_tvalid,
-    output                                         s_axis_tready,
+    output reg                                     s_axis_tready,
     input                                          s_axis_tlast,
 
     input                             nf0_sel_valid,
@@ -118,18 +120,25 @@ module port_tm
 
    //--------------------- Internal Parameters-------------------------
    /* For Insertion FSM */
-   localparam WRITE_STORAGE        = 1;
-   localparam WRITE_PIFO           = 2;
-   localparam FINISH_PKT           = 4;
-   localparam DROP_PKT             = 8;
-   localparam IFSM_NUM_STATES      = 4;
+   localparam WAIT_START           = 1;
+   localparam FINISH_PKT           = 2;
+   localparam DROP_PKT             = 4;
+   localparam IFSM_NUM_STATES      = 3;
 
    localparam SEG_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam META_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam PTRS_WIDTH = SEG_ADDR_WIDTH + META_ADDR_WIDTH;
 
    //---------------------- Wires and Regs ---------------------------- 
-   reg                     s_axis_ifsm_tvalid;
+   wire [C_M_AXIS_DATA_WIDTH - 1:0]              m_axis_tdata_out;
+   wire [((C_M_AXIS_DATA_WIDTH / 8)) - 1:0]      m_axis_tkeep_out;
+   wire [C_M_AXIS_TUSER_WIDTH-1:0]               m_axis_tuser_out;
+   wire                                          m_axis_tvalid_out;
+   wire                                          m_axis_tready_out;
+   wire                                          m_axis_tlast_out;
+
+   reg  s_axis_tvalid_storage;
+   wire s_axis_tready_storage;
 
    reg  [NUM_PORTS-1:0]    pifo_insert;
    reg  [NUM_PORTS-1:0]    pifo_remove;
@@ -138,11 +147,14 @@ module port_tm
    wire [RANK_WIDTH-1:0]   pifo_rank_out  [NUM_PORTS-1:0];
    wire [PTRS_WIDTH-1:0]   pifo_meta_out  [NUM_PORTS-1:0];
    wire [NUM_PORTS-1:0]    pifo_valid_out;
+   wire [NUM_PORTS-1:0]    pifo_busy;
+   wire [NUM_PORTS-1:0]    pifo_full;
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
-   reg  [RANK_WIDTH-1 : 0]              rank_in_r, rank_in_r_next;
-   reg  [PTRS_WIDTH-1 : 0]              ptrs_in_r, ptrs_in_r_next;
-   reg  [L2_NUM_PORTS-1 : 0]            dport_in_r, dport_in_r_next;
+//   reg  [RANK_WIDTH-1 : 0]              rank_in_r, rank_in_r_next;
+//   reg  [PTRS_WIDTH-1 : 0]              ptrs_in_r, ptrs_in_r_next;
+//   reg  [L2_NUM_PORTS-1 : 0]            dport_in_r, dport_in_r_next;
+   reg [L2_NUM_PORTS-1 : 0]     dport_in;
 
    wire [PTRS_WIDTH - 1 : 0]    storage_ptr_out_tdata;
    wire                         storage_ptr_out_tvalid;
@@ -168,6 +180,34 @@ module port_tm
    reg [PORT_WIDTH-1:0]         dst_port;
  
    //-------------------- Modules and Logic ---------------------------
+   // input pipeline stage
+   axi_stream_pipeline
+     #(
+        .C_M_AXIS_DATA_WIDTH  (C_M_AXIS_DATA_WIDTH),
+        .C_S_AXIS_DATA_WIDTH  (C_S_AXIS_DATA_WIDTH),
+        .C_M_AXIS_TUSER_WIDTH (C_M_AXIS_TUSER_WIDTH),
+        .C_S_AXIS_TUSER_WIDTH (C_S_AXIS_TUSER_WIDTH)
+      )
+   output_axi_pipe
+     (
+       .axis_aclk   (axis_aclk),
+       .axis_resetn (axis_resetn),
+
+       .m_axis_tdata  (m_axis_tdata),
+       .m_axis_tkeep  (m_axis_tkeep),
+       .m_axis_tuser  (m_axis_tuser),
+       .m_axis_tvalid (m_axis_tvalid),
+       .m_axis_tready (m_axis_tready),
+       .m_axis_tlast  (m_axis_tlast),
+
+       .s_axis_tdata  (m_axis_tdata_out),
+       .s_axis_tkeep  (m_axis_tkeep_out),
+       .s_axis_tuser  (m_axis_tuser_out),
+       .s_axis_tvalid (m_axis_tvalid_out),
+       .s_axis_tready (m_axis_tready_out),
+       .s_axis_tlast  (m_axis_tlast_out)
+     );
+
     req_arbiter #(.L2_NUM_PORTS(L2_NUM_PORTS))
     req_arbiter_inst
     (
@@ -208,18 +248,18 @@ module port_tm
        .axis_aclk (axis_aclk),
        .axis_resetn (axis_resetn),
        // pkt_storage output pkts
-       .m_axis_pkt_tdata (m_axis_tdata),
-       .m_axis_pkt_tkeep (m_axis_tkeep),
-       .m_axis_pkt_tuser (m_axis_tuser),
-       .m_axis_pkt_tvalid (m_axis_tvalid),
-       .m_axis_pkt_tready (m_axis_tready),
-       .m_axis_pkt_tlast (m_axis_tlast),
+       .m_axis_pkt_tdata (m_axis_tdata_out),
+       .m_axis_pkt_tkeep (m_axis_tkeep_out),
+       .m_axis_pkt_tuser (m_axis_tuser_out),
+       .m_axis_pkt_tvalid (m_axis_tvalid_out),
+       .m_axis_pkt_tready (m_axis_tready_out),
+       .m_axis_pkt_tlast (m_axis_tlast_out),
        // pkt_storage input pkts
        .s_axis_pkt_tdata  (s_axis_tdata),
        .s_axis_pkt_tkeep  (s_axis_tkeep),
        .s_axis_pkt_tuser  (s_axis_tuser),
-       .s_axis_pkt_tvalid (s_axis_ifsm_tvalid),
-       .s_axis_pkt_tready (s_axis_tready),
+       .s_axis_pkt_tvalid (s_axis_tvalid_storage),
+       .s_axis_pkt_tready (s_axis_tready_storage),
        .s_axis_pkt_tlast  (s_axis_tlast),
        // pkt_storage output pointers (write result output interface)
        .m_axis_ptr_tdata  (storage_ptr_out_tdata),
@@ -236,13 +276,22 @@ module port_tm
     generate
     for (i=0; i < NUM_PORTS; i=i+1) begin: virtual_output_pifos
         /* PIFO to store rank values and pointers */ 
-        pifo_reg
+        pifo_top
         #(
          .L2_MAX_SIZE(log2(PIFO_DEPTH)),
          .RANK_WIDTH(RANK_WIDTH),
-         .META_WIDTH(PTRS_WIDTH)
+         .META_WIDTH(PTRS_WIDTH),
+         .L2_REG_WIDTH(log2(PIFO_REG_DEPTH)),
+         .NUM_SKIP_LISTS(NUM_SKIP_LISTS)
         )
-        pifo_reg_inst
+        pifo_inst
+//        pifo_reg
+//        #(
+//         .L2_MAX_SIZE(log2(PIFO_DEPTH)),
+//         .RANK_WIDTH(RANK_WIDTH),
+//         .META_WIDTH(PTRS_WIDTH)
+//        )
+//        pifo_reg_inst
         (
          .rst       (~axis_resetn),
          .clk       (axis_aclk),
@@ -252,7 +301,9 @@ module port_tm
          .meta_in   (pifo_meta_in[i]),
          .rank_out  (pifo_rank_out[i]),
          .meta_out  (pifo_meta_out[i]),
-         .valid_out (pifo_valid_out[i])
+         .valid_out (pifo_valid_out[i]),
+         .busy      (pifo_busy[i]),
+         .full      (pifo_full[i])
         );
     end
     endgenerate
@@ -279,12 +330,18 @@ module port_tm
       // default values
       ifsm_state_next   = ifsm_state;
 
-      s_axis_ifsm_tvalid = s_axis_tvalid;
-      dst_port = s_axis_tuser[DST_PORT_POS+PORT_WIDTH-1 : DST_PORT_POS];
+      s_axis_tready = 1;
 
-      rank_in_r_next = rank_in_r;
-      dport_in_r_next = dport_in_r;
-      ptrs_in_r_next = ptrs_in_r;
+      dst_port = s_axis_tuser[DST_PORT_POS+PORT_WIDTH-1 : DST_PORT_POS];
+      // compute the dst_port from one-hot (assuming no broadcasting)
+      dport_in = (8'b0000_0001 & dst_port) ? 0 :
+                 (8'b0000_0100 & dst_port) ? 1 :
+                 (8'b0001_0000 & dst_port) ? 2 : 
+                 (8'b0100_0000 & dst_port) ? 3 : 0;
+
+//      rank_in_r_next = rank_in_r;
+//      dport_in_r_next = dport_in_r;
+//      ptrs_in_r_next = ptrs_in_r;
 
       for (j=0; j < NUM_PORTS; j=j+1) begin
           pifo_insert[j]  = 0;
@@ -293,63 +350,45 @@ module port_tm
       end
 
       case(ifsm_state)
-          WRITE_STORAGE: begin
+          WAIT_START: begin
               // Wait until the first word of the pkt
               if (s_axis_tready && s_axis_tvalid) begin
-                  if (dst_port == 0) begin
+                  if (dst_port == 0 | ~s_axis_tready_storage | pifo_busy | pifo_full) begin
                       // drop the pkt
-                      s_axis_ifsm_tvalid = 0;
+                      s_axis_tvalid_storage = 0;
                       ifsm_state_next = DROP_PKT;
                   end
                   else begin 
-                      // register the rank, and pointers returned from pkt_storage
-                      rank_in_r_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
-                      ptrs_in_r_next = storage_ptr_out_tdata;
-//                      // check storage_ptr_out_tvalid is asserted
-//                      if (storage_ptr_out_tvalid == 0) begin
-//                          $display("ERROR: port_tm - ifsm_state = WRITE_STORAGE, storage_ptr_out_tvalid=0 for first word of pkt\n");
-//                      end
-                      // register the dst_port (assuming no broadcasting)
-                      dport_in_r_next = (8'b0000_0001 & dst_port) ? 0 :
-                                        (8'b0000_0100 & dst_port) ? 1 :
-                                        (8'b0001_0000 & dst_port) ? 2 : 
-                                        (8'b0100_0000 & dst_port) ? 3 : 0; 
+                      // write to storage
+                      s_axis_tvalid_storage = 1;
+
+                      // write to PIFO
+                      pifo_insert[dport_in] = 1;
+                      pifo_rank_in[dport_in] = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
+                      pifo_meta_in[dport_in] = storage_ptr_out_tdata;
 
                       // transition to WRITE_PIFO state
-                      ifsm_state_next = WRITE_PIFO;
+                      ifsm_state_next = FINISH_PKT;
                   end
               end
-          end
-
-          WRITE_PIFO: begin
-              // Will always be in this state for the second word of the pkt (unless pkt is dropped)
-              // Insert rank and ptrs into appropriate virtual output PIFO
-              pifo_insert[dport_in_r] = 1;
-              pifo_rank_in[dport_in_r] = rank_in_r;
-              pifo_meta_in[dport_in_r] = ptrs_in_r;
-
-              // If this is the last word of the pkt then transition to the WRITE_STORAGE state.
-              // Otherwise, transition to the FINISH_PKT state
-              if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
-                  ifsm_state_next = WRITE_STORAGE;
-              end
               else begin
-                  ifsm_state_next = FINISH_PKT;
-              end              
+                  s_axis_tvalid_storage = 0;
+              end
           end
 
           FINISH_PKT: begin
-              // Wait until the end of the pkt before going back to WRITE_STORAGE state
+              s_axis_tvalid_storage = s_axis_tvalid;
+              // Wait until the end of the pkt before going back to WAIT_START state
               if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
-                  ifsm_state_next = WRITE_STORAGE;
+                  ifsm_state_next = WAIT_START;
               end
           end
 
           DROP_PKT: begin
-              s_axis_ifsm_tvalid = 0;
-              // Wait until the end of the pkt before going back to WRITE_STORAGE state
+              s_axis_tvalid_storage = 0;
+              // Wait until the end of the pkt before going back to WAIT_START state
               if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
-                  ifsm_state_next = WRITE_STORAGE;
+                  ifsm_state_next = WAIT_START;
               end
           end
 
@@ -358,18 +397,10 @@ module port_tm
 
    always @(posedge axis_aclk) begin
       if(~axis_resetn) begin
-         ifsm_state <= WRITE_STORAGE;
-
-         rank_in_r <= 0;
-         dport_in_r <= 0;
-         ptrs_in_r <= 0;
+         ifsm_state <= WAIT_START;
       end
       else begin
          ifsm_state <= ifsm_state_next;
-
-         rank_in_r <= rank_in_r_next;
-         dport_in_r <= dport_in_r_next;
-         ptrs_in_r <= ptrs_in_r_next;
       end
    end
 
@@ -388,7 +419,7 @@ module port_tm
        // Wait for the req_arbiter to produce valid data
        // And the pkt_storage to be ready to accept read requests
        // And we actually want to read the pkts out
-//       if (arb_valid && storage_ptr_in_tready && m_axis_tready) begin
+//       if (arb_valid && storage_ptr_in_tready && m_axis_tready_out) begin
        if (arb_valid && storage_ptr_in_tready) begin
            // read PIFO and submit read request to pkt_storage
            pifo_remove[arb_queue] = 1;

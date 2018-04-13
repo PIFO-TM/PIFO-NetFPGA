@@ -62,9 +62,9 @@ module traffic_manager
     parameter NUM_PORTS            = 2**L2_NUM_PORTS,
     parameter RANK_WIDTH           = 32,
     // max num pkts the pifo can store
-    parameter PIFO_DEPTH           = 16,
+    parameter PIFO_DEPTH           = 1024,
     // max # 64B pkts that can fit in storage
-    parameter STORAGE_MAX_PKTS     = 24 //4096
+    parameter STORAGE_MAX_PKTS     = 1024 //4096
 )
 (
     // Part 1: System side signals
