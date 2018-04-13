@@ -1,0 +1,12 @@
+
+This version uses a pifo_reg module in the top level.
+
+Enqueue procedure:
+  If reg.max_rank_valid && input rank < reg.max_rank:
+    reg.insert(input rank)
+  else:
+    skip-lists.insert(input rank)
+
+reg replenishment procedure:
+  // background process that removes from skip lists and inserts into reg
+
