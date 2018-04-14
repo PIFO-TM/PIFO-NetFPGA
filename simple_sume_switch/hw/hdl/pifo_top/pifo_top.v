@@ -15,9 +15,9 @@ module pifo_top
     input                            remove,
     input      [RANK_WIDTH-1:0]      rank_in,
     input      [META_WIDTH-1:0]      meta_in,
-    output reg [RANK_WIDTH-1:0]      rank_out,
-    output reg [META_WIDTH-1:0]      meta_out,
-    output reg                       valid_out,
+    output     [RANK_WIDTH-1:0]      rank_out,
+    output     [META_WIDTH-1:0]      meta_out,
+    output                           valid_out,
     output reg                       busy,
     output reg                       full
 );
@@ -37,14 +37,27 @@ module pifo_top
     localparam NUM_LEVELS = L2_NUM_SL_FLOOR + 1;
 
     localparam L2_IFSM_STATES = 1;
-    localparam IDLE         = 0;
-    localparam WRITE_INSERT = 1;
+    localparam IFSM_IDLE    = 0;
+    localparam INSERT_SL    = 1;
 
     localparam TSTAMP_BITS = 32;
     localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE - log2(NUM_SKIP_LISTS) + 1;
 //    localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE;
 
     /*------------ Wires and Regs ------------*/
+    reg                               pr_insert;
+    reg  [RANK_WIDTH-1:0]             pr_rank_in;
+    reg  [META_WIDTH+TSTAMP_BITS-1:0] pr_meta_in;
+    wire [RANK_WIDTH-1:0]             pr_max_rank;
+    wire [META_WIDTH+TSTAMP_BITS-1:0] pr_max_meta;
+    wire                              pr_max_valid;
+    wire [L2_REG_WIDTH:0]             pr_num_entries;
+    wire                              pr_empty;
+    wire                              pr_full;
+    wire [META_WIDTH+TSTAMP_BITS-1:0] pr_meta_out;
+
+    reg direct_pr_insert;
+
     reg [NUM_SKIP_LISTS-1:0]            sl_insert;
     reg [NUM_SKIP_LISTS-1:0]            sl_remove;
     reg [RANK_WIDTH-1:0]                sl_rank_in [NUM_SKIP_LISTS-1:0];
@@ -61,17 +74,12 @@ module pifo_top
     reg [L2_MAX_SIZE-1:0]        sl_num_entries_lvls  [NUM_LEVELS:0] [(2**NUM_LEVELS)-1:0];
     reg [L2_NUM_SL_FLOOR:0]      skip_list_sel        [NUM_LEVELS:0] [(2**NUM_LEVELS)-1:0];
  
-    reg                     final_sel_valid, final_sel_valid_r, final_sel_valid_r_next;
-    reg [L2_NUM_SL_FLOOR:0] final_sel_skip_list, final_sel_skip_list_r, final_sel_skip_list_r_next;
-
-    reg rank_out_ifsm_valid;
-    reg [RANK_WIDTH-1:0] rank_out_ifsm;
-    reg [META_WIDTH-1:0] meta_out_ifsm;
+    reg                     final_enq_sel_valid_r, final_enq_sel_valid_r_next;
+    reg [L2_NUM_SL_FLOOR:0] final_enq_sel_sl_r, final_enq_sel_sl_r_next;
 
     reg [TSTAMP_BITS-1:0] tstamp_r;
 
     reg [L2_IFSM_STATES-1:0] ifsm_state, ifsm_state_next;
-    reg                      insert_r, insert_r_next;
     reg [RANK_WIDTH-1:0]     rank_in_r, rank_in_r_next;
     reg [META_WIDTH-1:0]     meta_in_r, meta_in_r_next;
 
@@ -87,13 +95,33 @@ module pifo_top
     reg [NUM_SKIP_LISTS-1:0]  val_or_empty;
     reg                       deq_condition;
 
-    reg rank_out_from_sl_valid;
-    reg [RANK_WIDTH-1:0] rank_out_from_sl;
-    reg [META_WIDTH-1:0] meta_out_from_sl;
-    reg ifsm_rank_removed;
-
-
     /*------------ Modules and Logic ------------*/
+
+    pifo_reg
+    #(
+        .L2_REG_WIDTH (L2_REG_WIDTH),
+        .RANK_WIDTH  (RANK_WIDTH),
+        .META_WIDTH  (META_WIDTH + TSTAMP_BITS)
+    )
+    pifo_reg_top
+    (
+        .rst           (rst),
+        .clk           (clk),
+        .insert        (pr_insert),
+        .rank_in       (pr_rank_in),
+        .meta_in       (pr_meta_in),
+        .remove        (remove),
+        .rank_out      (rank_out),
+        .meta_out      (pr_meta_out),
+        .valid_out     (valid_out),
+        .max_rank_out  (pr_max_rank),
+        .max_meta_out  (pr_max_meta),
+        .max_valid_out (pr_max_valid),
+        .num_entries   (pr_num_entries),
+        .empty         (pr_empty),
+        .full          (pr_full)
+    );
+    assign meta_out = pr_meta_out[META_WIDTH+TSTAMP_BITS-1:TSTAMP_BITS];
 
     /* Parallel skip lists */
     genvar k;
@@ -172,111 +200,19 @@ module pifo_top
             end
         end
  
-        final_sel_valid_r_next = sl_valid_lvls[NUM_LEVELS][0];
-        final_sel_skip_list_r_next = skip_list_sel[NUM_LEVELS][0];
- 
+        final_enq_sel_valid_r_next = sl_valid_lvls[NUM_LEVELS][0];
+        final_enq_sel_sl_r_next = skip_list_sel[NUM_LEVELS][0];
     end
 
-    // increment timestamp counter
+    // register the enqueue skip list selection
     always @(posedge clk) begin
         if (rst) begin
-            final_sel_valid_r <= 0;
-            final_sel_skip_list_r <= 0;
+            final_enq_sel_valid_r <= 0;
+            final_enq_sel_sl_r <= 0;
         end
         else begin
-            final_sel_valid_r <= final_sel_valid_r_next;
-            final_sel_skip_list_r <= final_sel_skip_list_r_next;
-        end
-    end
-
-    /* Insertion Logic: Writes input requests into the (available) skip list with the min # entries */
-    integer p;
-    always @(*) begin
-        // default values
-        ifsm_state_next = ifsm_state;
-
-        full = &sl_full_out;
-
-        insert_r_next = insert_r;
-        rank_in_r_next = rank_in_r;
-        meta_in_r_next = meta_in_r;
-
-
-        for (p=0; p<NUM_SKIP_LISTS; p=p+1) begin
-            sl_insert[p] = 0;
-            sl_rank_in[p] = 0;
-            sl_meta_in[p] = 0;
-        end
-
-        case (ifsm_state)
-            IDLE: begin
-                // choose the skip list to insert into and register selection
-                rank_out_ifsm_valid = 0;
-                rank_out_ifsm = 0;
-                meta_out_ifsm = 0;
-                busy = ~final_sel_valid_r_next;
-                if (insert) begin
-                    // register inputs
-                    insert_r_next = insert;
-                    rank_in_r_next = rank_in;
-                    meta_in_r_next = meta_in;
-                    ifsm_state_next = WRITE_INSERT;
-                end
-            end
-
-            WRITE_INSERT: begin
-                // continue attempting to perform the insertion until busy on the selected skip list is deasserted
-                busy = 1;
-                rank_out_ifsm_valid = 1;
-                rank_out_ifsm = rank_in_r;
-                meta_out_ifsm = meta_in_r;
-
-                if (ifsm_rank_removed) begin
-                    // no longer need to perform insertion
-                    ifsm_state_next = IDLE;
-                end
-                else begin
-                    for (p=0; p<NUM_SKIP_LISTS; p=p+1) begin
-                        if (final_sel_valid_r && p == final_sel_skip_list_r && sl_busy_out[p] == 0 && sl_full_out[p] == 0) begin
-                            sl_insert[p] = insert_r;
-                            sl_rank_in[p] = rank_in_r;
-                            sl_meta_in[p] = {meta_in_r, tstamp_r};
-                            ifsm_state_next = IDLE;
-                        end
-                        else begin
-                            sl_insert[p] = 0;
-                            sl_rank_in[p] = 0;
-                            sl_meta_in[p] = 0;
-                        end
-                    end
-                end
-            end
-        endcase 
-    end
-
-    // ifsm state update 
-    always @(posedge clk) begin
-        if (rst) begin
-            ifsm_state <= IDLE;
-            insert_r <= 0;
-            rank_in_r <= 0;
-            meta_in_r <= 0;
-        end
-        else begin
-            ifsm_state <= ifsm_state_next;
-            insert_r <= insert_r_next;
-            rank_in_r <= rank_in_r_next;
-            meta_in_r <= meta_in_r_next;
-        end
-    end
-
-    // increment timestamp counter 
-    always @(posedge clk) begin
-        if (rst) begin
-            tstamp_r <= 0;
-        end
-        else begin
-            tstamp_r <= tstamp_r + 1;
+            final_enq_sel_valid_r <= final_enq_sel_valid_r_next;
+            final_enq_sel_sl_r    <= final_enq_sel_sl_r_next;
         end
     end
 
@@ -368,70 +304,140 @@ module pifo_top
         end
     end
 
-    /* Removal logic: register the outputs and submit removal request */
-    integer v;
+
+    /* Insertion Logic and pifo_reg replenishment logic */
+    integer p;
     always @(*) begin
-        valid_out = final_deq_sel_valid_r_next & final_deq_sel_valid_r;
+        /* Insertion State Machine:
+         *   - Insert into the pifo_reg if the new value is less than the current max
+         *   - If the pifo_reg is full when inserting into it then insert the old max into the skip lists
+         *   - If the new value is greater than the current max in the pifo_reg then insert directly into the skip lists 
+         */
 
-        rank_out_from_sl_valid = final_deq_sel_valid_r;
-        rank_out_from_sl = 0;
-        meta_out_from_sl = 0;
+        // default values
+        ifsm_state_next = ifsm_state;
 
-        for (v=0; v<NUM_SKIP_LISTS; v=v+1) begin
-            if (final_deq_sel_valid_r && v == final_deq_sel_sl_r) begin
-                sl_remove[v] = remove & ~ifsm_rank_removed;
+        full = &sl_full_out & pr_full;
 
-                rank_out_from_sl = sl_rank_out[v];
-                meta_out_from_sl = sl_meta_out[v][META_WIDTH+TSTAMP_BITS-1 : TSTAMP_BITS];
+        // don't perform any insertions if we don't have a skip list to try enqueueing into
+        // or the pifo_reg is not empty and the max_valid signal is low
+        busy = ~final_enq_sel_valid_r | ((pr_num_entries != 0) && ~pr_max_valid);
+
+        // input regs hold value by default
+        rank_in_r_next = rank_in_r;
+        meta_in_r_next = meta_in_r;
+
+        // default don't insert into reg
+        pr_rank_in = 0;
+        pr_meta_in = 0;
+        pr_insert = 0;
+
+        // default don't insert into skip lists
+        for (p=0; p<NUM_SKIP_LISTS; p=p+1) begin
+            sl_insert[p] = 0;
+            sl_rank_in[p] = 0;
+            sl_meta_in[p] = 0;
+            sl_remove[p] = 0;
+        end
+
+        case (ifsm_state)
+            IFSM_IDLE: begin
+                if (insert) begin
+                    // check if we should insert directly into the pifo_reg
+                    // NOTE: only reason pr_max_valid should be low here is because the pr is empty
+                    if (pr_max_valid && (rank_in < pr_max_rank)) begin
+                        // insert directly into reg
+                        pr_rank_in = rank_in;
+                        pr_meta_in = {meta_in, tstamp_r};
+                        pr_insert = 1;
+                        if (pr_full & ~remove) begin
+                            // kick the pr's max value to the skip lists
+                            if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
+                                // can insert directly into the selected skip list
+                                sl_rank_in[final_enq_sel_sl_r] = pr_max_rank;
+                                sl_meta_in[final_enq_sel_sl_r] = pr_max_meta;
+                                sl_insert[final_enq_sel_sl_r] = 1;
+                            end
+                            else begin
+                                // keep looking for a skip list to insert into
+                                rank_in_r_next = pr_max_rank;
+                                meta_in_r_next = pr_max_meta;
+                                ifsm_state_next = INSERT_SL;
+                            end
+                        end
+                    end
+                    else begin
+                        // try inserting into the selected skip list
+                        if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
+                            // can insert directly into selected skip list
+                            sl_rank_in[final_enq_sel_sl_r] = rank_in;
+                            sl_meta_in[final_enq_sel_sl_r] = {meta_in, tstamp_r};
+                            sl_insert[final_enq_sel_sl_r] = 1;
+                        end
+                        else begin
+                            // keep looking for a skip list to insert into
+                            rank_in_r_next = rank_in;
+                            meta_in_r_next = meta_in;
+                            ifsm_state_next = INSERT_SL;
+                        end
+                    end
+                end
             end
-            else begin
-                sl_remove[v] = 0;
+
+            INSERT_SL: begin
+                // continue attempting to perform the insertion until busy on the selected skip list is deasserted
+                busy = 1;
+                if (final_enq_sel_valid_r & ~sl_busy_out[final_enq_sel_sl_r] & ~sl_full_out[final_enq_sel_sl_r]) begin
+                    sl_rank_in[final_enq_sel_sl_r] = rank_in_r;
+                    sl_meta_in[final_enq_sel_sl_r] = {meta_in_r, tstamp_r};
+                    sl_insert[final_enq_sel_sl_r] = 1;
+                    ifsm_state_next = IFSM_IDLE;
+                end
+            end
+        endcase
+
+
+        /* pifo_reg replenishment state machine:
+         *   - If there is room in the pifo_reg 
+         *       && it's not busy
+         *       && the skip list output selection is valid
+         *       && we are not directly inserting into the pifo_reg
+         */
+        direct_pr_insert = insert && pr_max_valid && (rank_in < pr_max_rank);
+        if (~pr_full & ~direct_pr_insert) begin
+            // we should replenish the reg if the skip list dequeue selection is valid
+            if (final_deq_sel_valid_r_next & final_deq_sel_valid_r) begin  // TODO: can we remove the dependency on final_deq_sel_valid_r_next?
+                pr_insert = 1;
+                pr_rank_in = sl_rank_out[final_deq_sel_sl_r];
+                pr_meta_in = sl_meta_out[final_deq_sel_sl_r];
+                sl_remove[final_deq_sel_sl_r] = 1;
             end
         end
     end
 
-
-    /* Logic to drive output and ifsm_rank_removed */
-    always @(*) begin
-        if (remove) begin
-            if (rank_out_from_sl_valid & rank_out_ifsm_valid) begin
-                // both are valid
-                if (rank_out_ifsm < rank_out_from_sl) begin
-                    rank_out = rank_out_ifsm;
-                    meta_out = meta_out_ifsm;
-                    ifsm_rank_removed = 1;
-                end
-                else begin
-                    rank_out = rank_out_from_sl;
-                    meta_out = meta_out_from_sl;
-                    ifsm_rank_removed = 0;
-                end
-            end
-            else if (rank_out_ifsm_valid) begin
-                // only ifsm insertion is valid
-                rank_out = rank_out_ifsm;
-                meta_out = meta_out_ifsm;
-                ifsm_rank_removed = 1;
-            end
-            else begin
-                // default
-                rank_out = rank_out_from_sl;
-                meta_out = meta_out_from_sl;
-                ifsm_rank_removed = 0;
-            end
+    // ifsm state update 
+    always @(posedge clk) begin
+        if (rst) begin
+            ifsm_state <= IFSM_IDLE;
+            rank_in_r <= 0;
+            meta_in_r <= 0;
         end
         else begin
-            rank_out = 0;
-            meta_out = 0;
-            ifsm_rank_removed = 0;
+            ifsm_state <= ifsm_state_next;
+            rank_in_r <= rank_in_r_next;
+            meta_in_r <= meta_in_r_next;
         end
     end
 
-
-wire [RANK_WIDTH-1:0]               sl_rank_in_0  =  sl_rank_in[0];
-wire [META_WIDTH+TSTAMP_BITS-1:0]   sl_meta_in_0  =  sl_meta_in[0];
-wire [RANK_WIDTH-1:0]               sl_rank_out_0 =  sl_rank_out[0];
-wire [META_WIDTH+TSTAMP_BITS-1:0]   sl_meta_out_0 =  sl_meta_out[0];
+    // increment timestamp counter 
+    always @(posedge clk) begin
+        if (rst) begin
+            tstamp_r <= 0;
+        end
+        else begin
+            tstamp_r <= tstamp_r + 1;
+        end
+    end
 
 //integer idx;
 //
