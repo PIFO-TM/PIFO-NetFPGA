@@ -361,33 +361,20 @@ module pifo_top
         case (ifsm_state)
             IFSM_IDLE: begin
                 if (insert) begin
+                    rank_in_r_next = rank_in;
+                    meta_in_r_next = {meta_in, tstamp_r};
                     // insert into the reg if (rank_in < pr_max_rank) or (rank_in < sl_min_rank) or (skip lists are all empty and pr is not full)
                     if (insert_reg) begin
                         // insert into reg
-                        rank_in_r_next = rank_in;
-                        meta_in_r_next = {meta_in, tstamp_r};
                         ifsm_state_next = INSERT_REG;
                     end
                     else if (insert_unknown) begin
                         // don't know where to insert into so take some more time to figure it out
-                        rank_in_r_next = rank_in;
-                        meta_in_r_next = {meta_in, tstamp_r};
                         ifsm_state_next = INSERT_SEARCH;
                     end
                     else begin
-                        // try inserting into the selected skip list
-                        if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
-                            // can insert directly into selected skip list
-                            sl_rank_in[final_enq_sel_sl_r] = rank_in;
-                            sl_meta_in[final_enq_sel_sl_r] = {meta_in, tstamp_r};
-                            sl_insert[final_enq_sel_sl_r] = 1;
-                        end
-                        else begin
-                            // keep looking for a skip list to insert into
-                            rank_in_r_next = rank_in;
-                            meta_in_r_next = {meta_in, tstamp_r};
-                            ifsm_state_next = INSERT_SL;
-                        end
+                        // insert into the skip list(s)
+                        ifsm_state_next = INSERT_SL;
                     end
                 end
             end
