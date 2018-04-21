@@ -339,15 +339,15 @@ module pifo_top
         meta_in_r_next = meta_in_r;
 
         // default don't insert into reg
-        pr_rank_in = 0;
-        pr_meta_in = 0;
+        pr_rank_in = rank_in_r;
+        pr_meta_in = meta_in_r;
         pr_insert = 0;
 
         // default don't insert into skip lists
         for (p=0; p<NUM_SKIP_LISTS; p=p+1) begin
             sl_insert[p] = 0;
-            sl_rank_in[p] = 0;
-            sl_meta_in[p] = 0;
+            sl_rank_in[p] = rank_in_r;
+            sl_meta_in[p] = meta_in_r;
             sl_remove[p] = 0;
         end
 
