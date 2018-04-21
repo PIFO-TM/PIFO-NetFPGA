@@ -38,8 +38,9 @@ module pifo_top
 
     localparam L2_IFSM_STATES = 2;
     localparam IFSM_IDLE      = 0;
-    localparam INSERT_SEARCH  = 1;
-    localparam INSERT_SL      = 2;
+    localparam INSERT_REG     = 1;
+    localparam INSERT_SEARCH  = 2;
+    localparam INSERT_SL      = 3;
 
     localparam TSTAMP_BITS = 32;
     localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE - log2(NUM_SKIP_LISTS) + 1;
@@ -89,6 +90,8 @@ module pifo_top
     reg [RANK_WIDTH-1:0] sl_min_rank;
     reg                  insert_reg;
     reg                  insert_unknown;
+
+    reg [RANK_WIDTH-1:0] rank_in_val;
 
     // removal selection signals
     reg [(2**NUM_LEVELS)-1:0]  valid_out_lvls    [NUM_LEVELS:0];
@@ -351,7 +354,8 @@ module pifo_top
         sl_min_rank_valid = final_deq_sel_valid_r;
         sl_min_rank = sl_rank_out[final_deq_sel_sl_r];
 
-        insert_reg = (pr_max_valid && (rank_in < pr_max_rank)) || (sl_min_rank_valid && (rank_in < sl_min_rank) && ~pr_full) || (&sl_empty & ~pr_full);
+        rank_in_val = rank_in;
+        insert_reg = (pr_max_valid && (rank_in_val < pr_max_rank)) || (sl_min_rank_valid && (rank_in_val < sl_min_rank) && ~pr_full) || (&sl_empty & ~pr_full);
         insert_unknown = (pr_num_entries != 0 && ~pr_max_valid) || (~&sl_empty & ~sl_min_rank_valid & ~pr_full);
 
         case (ifsm_state)
@@ -360,24 +364,9 @@ module pifo_top
                     // insert into the reg if (rank_in < pr_max_rank) or (rank_in < sl_min_rank) or (skip lists are all empty and pr is not full)
                     if (insert_reg) begin
                         // insert into reg
-                        pr_rank_in = rank_in;
-                        pr_meta_in = {meta_in, tstamp_r};
-                        pr_insert = 1;
-                        if (pr_full & ~remove) begin
-                            // kick the pr's max value to the skip lists
-                            if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
-                                // can insert directly into the selected skip list
-                                sl_rank_in[final_enq_sel_sl_r] = pr_max_rank;
-                                sl_meta_in[final_enq_sel_sl_r] = pr_max_meta;
-                                sl_insert[final_enq_sel_sl_r] = 1;
-                            end
-                            else begin
-                                // keep looking for a skip list to insert into
-                                rank_in_r_next = pr_max_rank;
-                                meta_in_r_next = pr_max_meta;
-                                ifsm_state_next = INSERT_SL;
-                            end
-                        end
+                        rank_in_r_next = rank_in;
+                        meta_in_r_next = {meta_in, tstamp_r};
+                        ifsm_state_next = INSERT_REG;
                     end
                     else if (insert_unknown) begin
                         // don't know where to insert into so take some more time to figure it out
@@ -403,10 +392,35 @@ module pifo_top
                 end
             end
 
+            INSERT_REG: begin
+                busy = 1;
+                pr_rank_in = rank_in_r;
+                pr_meta_in = meta_in_r;
+                pr_insert = 1;
+                ifsm_state_next = IFSM_IDLE;
+                if (pr_full & ~remove) begin
+                    // kick the pr's max value to the skip lists
+                    if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
+                        // can insert directly into the selected skip list
+                        sl_rank_in[final_enq_sel_sl_r] = pr_max_rank;
+                        sl_meta_in[final_enq_sel_sl_r] = pr_max_meta;
+                        sl_insert[final_enq_sel_sl_r] = 1;
+                    end
+                    else begin
+                        // keep looking for a skip list to insert into
+                        rank_in_r_next = pr_max_rank;
+                        meta_in_r_next = pr_max_meta;
+                        ifsm_state_next = INSERT_SL;
+                    end
+                end
+
+            end
+
             INSERT_SEARCH: begin
                 // don't know where to insert yet so keep looking
                 busy = 1;
                 ifsm_state_next = IFSM_IDLE; // default next state
+                rank_in_val = rank_in_r; // used to compute insert_reg, TODO: is this going to work?
                 if (insert_reg) begin
                     // insert into reg
                     pr_rank_in = rank_in_r;
