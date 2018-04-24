@@ -436,19 +436,8 @@ module pifo_top
                     ifsm_state_next = INSERT_SEARCH;
                 end
                 else begin
-                    // try inserting into the selected skip list
-                    if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
-                        // can insert directly into selected skip list
-                        sl_rank_in[final_enq_sel_sl_r] = rank_in_r;
-                        sl_meta_in[final_enq_sel_sl_r] = meta_in_r;
-                        sl_insert[final_enq_sel_sl_r] = 1;
-                    end
-                    else begin
-                        // keep looking for a skip list to insert into
-                        rank_in_r_next = rank_in_r;
-                        meta_in_r_next = meta_in_r;
-                        ifsm_state_next = INSERT_SL;
-                    end
+                    // insert into the skip list(s)
+                    ifsm_state_next = INSERT_SL;
                 end
             end
 
