@@ -155,7 +155,7 @@ module pifo_reg
 				valid[num_entries-1] <= 0;
 				if (num_entries == 1)
 				    empty <= 1'b1;
-				full <= 1'b0;
+				full <= (insert == 0) ? 1'b0 : full;
 				num_entries <= num_entries - 1;
 			    calc_min_max <= 1;
 				insert_ltch <= insert;
