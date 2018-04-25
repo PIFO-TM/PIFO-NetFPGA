@@ -411,7 +411,7 @@ module pifo_top
                 if (insert_reg) begin
                     // insert into reg
                     pr_rank_in = rank_in_r;
-                    pr_meta_in = {meta_in_r, tstamp_r};
+                    pr_meta_in = meta_in_r;
                     pr_insert = 1;
                     if (pr_full & ~remove) begin
                         // kick the pr's max value to the skip lists
@@ -432,7 +432,7 @@ module pifo_top
                 else if (insert_unknown) begin
                     // don't know where to insert into so take some more time to figure it out
                     rank_in_r_next = rank_in_r;
-                    meta_in_r_next = {meta_in_r, tstamp_r};
+                    meta_in_r_next = meta_in_r;
                     ifsm_state_next = INSERT_SEARCH;
                 end
                 else begin
