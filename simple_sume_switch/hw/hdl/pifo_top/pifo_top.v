@@ -460,7 +460,7 @@ module pifo_top
          *       && the skip list output selection is valid
          *       && we are not directly inserting into the pifo_reg
          */
-        direct_pr_insert = insert_reg && ( (insert && ifsm_state == IFSM_IDLE) || ifsm_state == INSERT_SEARCH);
+        direct_pr_insert = (ifsm_state == INSERT_REG) || (insert_reg && ( (insert && ifsm_state == IFSM_IDLE) || ifsm_state == INSERT_SEARCH));
         if (~pr_full & ~direct_pr_insert & ~remove) begin
             // we should replenish the reg if the skip list dequeue selection is valid
             if (final_deq_sel_valid_r_next & final_deq_sel_valid_r) begin  // TODO: can we remove the dependency on final_deq_sel_valid_r_next?
