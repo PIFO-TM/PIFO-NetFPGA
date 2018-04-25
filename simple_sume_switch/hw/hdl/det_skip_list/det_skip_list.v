@@ -19,7 +19,7 @@ module det_skip_list
 	output valid_out,
     output reg [L2_MAX_SIZE:0] num_entries,
 	output busy,
-	output full
+	output reg full
 );
 
 	localparam MAX_SIZE = 2**L2_MAX_SIZE;
@@ -71,6 +71,7 @@ module det_skip_list
                RMV_WAIT_MEM_RD2   = 3'b100,
                RMV_CONN_LEFT_TAIL = 3'b101;
 
+
        reg [L2_MAX_SIZE-1:0] sl_fill_lo [0:SL_FILL_RANGES-1];
         initial begin
             sl_fill_lo[0]  = 12'd0;
@@ -118,7 +119,7 @@ module det_skip_list
             pr_fill_levels[10] = 12'd10;
             pr_fill_levels[11] = 12'd11;
         end
-	
+
 //	localparam [L2_MAX_SIZE-1:0] sl_fill_lo [0:SL_FILL_RANGES-1] =
 //    '{0, 1, 2, 4,  8, 16, 32,  64, 128, 256,  512, 1024
 //    };
@@ -135,6 +136,7 @@ module det_skip_list
 	reg free_list_wr;
 	reg [L2_MAX_SIZE-1:0] free_list_din;
     reg start_search;
+	reg insert_d1;
 	reg pr_insert;
 	reg pr_insert_d1;
 	reg sl_insert;
@@ -383,7 +385,7 @@ module det_skip_list
     #(
          .WIDTH(L2_MAX_SIZE),
          .MAX_DEPTH_BITS(L2_MAX_SIZE),
-         .PROG_FULL_THRESHOLD(NUM_LVLS)
+         .PROG_FULL_THRESHOLD(NUM_LVLS+1)
     )
     node_free_list
     (
@@ -399,8 +401,11 @@ module det_skip_list
         .empty       ()
     );
     
-	// Assert skip list full when not enough free nodes are available 
-	assign full = ~free_nodes_avail;
+	// Assert skip list full when not enough free nodes are available
+    always @(posedge clk)
+	begin
+	    full <= ~free_nodes_avail;
+	end
 	
     pifo_reg
     #(
@@ -439,6 +444,7 @@ module det_skip_list
 			lvl_cntr <= {L2_NUM_LVLS{1'b0}};
 			node_cntr <= {L2_MAX_SIZE{1'b0}};
 			free_list_wr <= 1'b0;
+			insert_d1 <= 1'b0;
 			pr_insert <= 1'b0;
 			pr_insert_d1 <= 1'b0;
 			sl_insert <= 1'b0;
@@ -487,6 +493,7 @@ module det_skip_list
 			sl_blk_ins_if_rmv <= 1'b0;
 			
 			bram_rd1     <= bram_rd;
+			insert_d1    <= insert;
 			pr_insert_d1 <= pr_insert;
 			
 		    case (main_state)
@@ -1113,7 +1120,7 @@ module det_skip_list
 	
 	// Internal busy not including throttling
 	// pr_insert_d1 asserts busy for one clock cycle after an insertion into the PIFO reg to allow time for pr_max_rank to be valid
-	assign int_busy = init_busy | ins_busy | pr_insert_d1 | rmv_busy;
+	assign int_busy = init_busy | ins_busy | insert_d1 | pr_insert_d1 | rmv_busy;
 	// External busy including (PIFO Reg empty AND SL not empty) to prevent starvation of replenishment
 	// of PIFO Reg from Skip List
 	assign busy = int_busy | pr_fill_busy;
