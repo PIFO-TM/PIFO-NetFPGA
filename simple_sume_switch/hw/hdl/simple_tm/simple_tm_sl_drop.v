@@ -109,11 +109,15 @@ module simple_tm_sl_drop
    localparam DROP_PKT             = 4;
    localparam IFSM_NUM_STATES      = 3;
 
+   localparam PIFO_START           = 0;
+   localparam WRITE_PIFO           = 1;
+   localparam L2_PIFO_STATES       = 1;
+
    localparam SEG_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam META_ADDR_WIDTH = log2(STORAGE_MAX_PKTS);
    localparam PTRS_WIDTH = SEG_ADDR_WIDTH + META_ADDR_WIDTH;
 
-   localparam RANK_WIDTH = 16; //32;
+   localparam RANK_WIDTH = 16;
    localparam Q_ID_WIDTH = 32;
    localparam Q_SIZE_BITS = 32;
 
@@ -145,10 +149,12 @@ module simple_tm_sl_drop
 
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
-//   reg  [RANK_WIDTH-1 : 0]              rank_in, rank_in_next;
-//   reg  [PTRS_WIDTH-1 : 0]              ptrs_in, ptrs_in_next;
+   reg  [RANK_WIDTH-1:0]                pifo_rank_in_r, pifo_rank_in_r_next;
+   reg  [PTRS_WIDTH-1:0]                pifo_meta_in_r, pifo_meta_in_r_next;
    reg pkt_in_accepted;
-//   reg pkt_in_accepted, pkt_in_accepted_r, pkt_in_accepted_r_next;
+
+   reg  [L2_PIFO_STATES-1:0]    ifsm_pifo_state, ifsm_pifo_state_next;
+   reg                          ifsm_pifo_ready;
 
    wire [PTRS_WIDTH - 1 : 0]    storage_ptr_out_tdata;
    wire                         storage_ptr_out_tvalid;
@@ -255,6 +261,7 @@ module simple_tm_sl_drop
    always @(*) begin
       // default values
       ifsm_state_next   = ifsm_state;
+      ifsm_pifo_state_next = ifsm_pifo_state;
 
       s_axis_tready = 1;
 
@@ -262,24 +269,21 @@ module simple_tm_sl_drop
       pifo_rank_in = 0;
       pifo_meta_in = 0;
 
-//      pkt_in_accepted = pkt_in_accepted_r;
-//      pkt_in_accepted_r_next = pkt_in_accepted_r;
-
       case(ifsm_state)
           WAIT_START: begin
               // Wait until the first word of the pkt
               if (s_axis_tready && s_axis_tvalid) begin
-                  if (s_axis_tready_storage & ~pifo_busy & ~pifo_full & (q_size_r[s_q_id] < QUEUE_LIMIT - MAX_PKT_SIZE)) begin
+                  if (s_axis_tready_storage & ifsm_pifo_ready & (q_size_r[s_q_id] < QUEUE_LIMIT - MAX_PKT_SIZE)) begin
+                      // write the 1st word of the pkt to storage
                       s_axis_tvalid_storage = 1;
-                      // register the rank, and pointers returned from pkt_storage
-                      pifo_insert = 1;
-                      pifo_rank_in = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
-                      pifo_meta_in = storage_ptr_out_tdata;
+                      // Kick off the PIFO writing state machine
+                      ifsm_pifo_state_next = WRITE_PIFO;
+                      pifo_rank_in_r_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
+                      pifo_meta_in_r_next = storage_ptr_out_tdata;
                       // TODO: static simulation check that storage_ptr_out_tvalid == 1
                       // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
                       pkt_in_accepted = 1;
-//                      pkt_in_accepted_r_next = 1;
 
                       // transition to WRITE_PIFO state
                       ifsm_state_next = FINISH_PKT;
@@ -287,7 +291,6 @@ module simple_tm_sl_drop
                   else begin
                       // drop the pkt
                       pkt_in_accepted = 0;
-//                      pkt_in_accepted_r_next = 0;
                       s_axis_tvalid_storage = 0;
                       ifsm_state_next = DROP_PKT;
                   end
@@ -321,18 +324,49 @@ module simple_tm_sl_drop
                   ifsm_state_next = DROP_PKT;
               end
           end
-
       endcase // case(ifsm_state)
+
+      /* PIFO Writing State Machine */
+
+      pifo_insert = 0;
+      pifo_rank_in = 0;
+      pifo_meta_in = 0;
+
+      case(ifsm_pifo_state)
+          PIFO_START: begin
+              ifsm_pifo_ready = ~pifo_full;
+              pifo_insert = 0;
+              pifo_rank_in = 0;
+              pifo_meta_in = 0;
+              // state transition is in the IFSM above
+          end
+
+          WRITE_PIFO: begin
+              ifsm_pifo_ready = 0;
+              // write to the PIFO
+              if (~pifo_busy & ~pifo_full) begin
+                  pifo_insert = 1;
+                  pifo_rank_in = pifo_rank_in_r;
+                  pifo_meta_in = pifo_meta_in_r;
+                  ifsm_pifo_state_next = PIFO_START;
+              end
+          end
+      endcase
+
    end // always @ (*)
 
    always @(posedge axis_aclk) begin
       if(~axis_resetn) begin
          ifsm_state <= WAIT_START;
-//         pkt_in_accepted_r <= 0;
+         pifo_rank_in_r <= 0;
+         pifo_meta_in_r <= 0;
+         ifsm_pifo_state <= PIFO_START;
       end
       else begin
          ifsm_state <= ifsm_state_next;
-//         pkt_in_accepted_r <= pkt_in_accepted_r_next;
+         pifo_rank_in_r <= pifo_rank_in_r_next;
+         pifo_meta_in_r <= pifo_meta_in_r_next;
+         ifsm_pifo_state <= ifsm_pifo_state_next;
       end
    end
 
