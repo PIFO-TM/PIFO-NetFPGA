@@ -435,16 +435,16 @@ module pifo_top
         endcase
 
 
-        /* pifo_reg replenishment state machine:
+        /* pifo_reg replenishment logic:
          *   - If there is room in the pifo_reg 
          *       && it's not busy
          *       && the skip list output selection is valid
          *       && we are not directly inserting into the pifo_reg
          */
-        direct_pr_insert = (ifsm_state == INSERT_REG) || (insert_reg && ( (insert && ifsm_state == IFSM_IDLE) || ifsm_state == INSERT_SEARCH));
+        direct_pr_insert = (ifsm_state == INSERT_REG);
         if (~pr_full & ~direct_pr_insert & ~remove) begin
             // we should replenish the reg if the skip list dequeue selection is valid
-            if (final_deq_sel_valid_r_next & final_deq_sel_valid_r) begin  // TODO: can we remove the dependency on final_deq_sel_valid_r_next?
+            if (final_deq_sel_valid_r) begin  // TODO: can we remove the dependency on final_deq_sel_valid_r_next?
                 pr_insert = 1;
                 pr_rank_in = sl_rank_out[final_deq_sel_sl_r];
                 pr_meta_in = sl_meta_out[final_deq_sel_sl_r];
