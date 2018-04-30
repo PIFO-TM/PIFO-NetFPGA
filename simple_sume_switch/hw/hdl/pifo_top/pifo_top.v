@@ -442,7 +442,7 @@ module pifo_top
          *       && we are not directly inserting into the pifo_reg
          */
         direct_pr_insert = (ifsm_state == INSERT_REG);
-        if (~pr_full & ~direct_pr_insert & ~remove) begin
+        if (~pr_full & ~direct_pr_insert) begin // NOTE: removed ~remove check
             // we should replenish the reg if the skip list dequeue selection is valid
             if (final_deq_sel_valid_r) begin  // TODO: can we remove the dependency on final_deq_sel_valid_r_next?
                 pr_insert = 1;
