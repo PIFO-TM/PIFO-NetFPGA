@@ -545,13 +545,13 @@ wire [Q_SIZE_BITS-1:0] q_size_2 = q_size_r[2];
 wire [Q_SIZE_BITS-1:0] q_size_3 = q_size_r[3];
 
 
-`ifdef COCOTB_SIM
-initial begin
-  $dumpfile ("simple_tm_sl_drop_waveform.vcd");
-  $dumpvars (0,simple_tm_sl_drop);
-  #1 $display("Sim running...");
-end
-`endif
+//`ifdef COCOTB_SIM
+//initial begin
+//  $dumpfile ("simple_tm_sl_drop_waveform.vcd");
+//  $dumpvars (0,simple_tm_sl_drop);
+//  #1 $display("Sim running...");
+//end
+//`endif
    
 endmodule // tm_top
 

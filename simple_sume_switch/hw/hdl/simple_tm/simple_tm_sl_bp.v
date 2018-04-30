@@ -336,13 +336,13 @@ module simple_tm_sl_bp
        end
    end // always @ (*)
 
-`ifdef COCOTB_SIM
-initial begin
-  $dumpfile ("simple_tm_sl_bp_waveform.vcd");
-  $dumpvars (0,simple_tm_sl_bp);
-  #1 $display("Sim running...");
-end
-`endif
+//`ifdef COCOTB_SIM
+//initial begin
+//  $dumpfile ("simple_tm_sl_bp_waveform.vcd");
+//  $dumpvars (0,simple_tm_sl_bp);
+//  #1 $display("Sim running...");
+//end
+//`endif
    
 endmodule // tm_top
 
