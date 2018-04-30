@@ -31,33 +31,29 @@
 //
 /*******************************************************************************
  *  File:
- *        rate_limiter.v
+ *        trim_ts.v
  *
  *  Library:
  *
  *  Module:
- *        rate_limiter
+ *        trim_ts
  *
  *  Author:
  *        Stephen Ibanez
  * 		
  *  Description:
- *        This module asserts a configurable amount of back pressure in order to
- *        perform rate limiting
+ *        This module trims incomming packets to 64B and includes an 8B timestamp
+ *        at the end 
  *
  */
 
-module rate_limiter
+module trim_ts
 #(
     // Pkt AXI Stream Data Width
     parameter C_M_AXIS_DATA_WIDTH  = 256,
     parameter C_S_AXIS_DATA_WIDTH  = 256,
     parameter C_M_AXIS_TUSER_WIDTH = 128,
-    parameter C_S_AXIS_TUSER_WIDTH = 128,
-    parameter SRC_PORT_POS         = 16,
-    parameter DST_PORT_POS         = 24,
-    parameter RANK_POS             = 32,
-    parameter BP_COUNT_POS         = 48
+    parameter C_S_AXIS_TUSER_WIDTH = 128
 )
 (
     // Global Ports
@@ -95,8 +91,8 @@ module rate_limiter
    //--------------------- Internal Parameters-------------------------
    /* For Insertion FSM */
    localparam WAIT_START     = 0;
-   localparam ASSERT_BP      = 1;
-   localparam RCV_WORD       = 2;
+   localparam WORD_TWO       = 1;
+   localparam FINISH_PKT     = 2;
    localparam L2_IFSM_STATES = 2;
 
    /* For Removal FSM */
@@ -104,17 +100,18 @@ module rate_limiter
    localparam RFSM_FINISH_PKT = 1;
    localparam L2_RFSM_STATES = 1;   
 
-   localparam BP_COUNT_BITS = 16;
-
    localparam MAX_DEPTH = 64; // measured in 32B words
    localparam L2_MAX_DEPTH = log2(MAX_DEPTH);
 
    localparam MAX_PKTS = MAX_DEPTH/2; // min pkt size is 64B
    localparam L2_MAX_PKTS = log2(MAX_PKTS);
 
+   localparam TSTAMP_BITS = 64;
+
    //---------------------- Wires and Regs ---------------------------- 
    reg  d_fifo_wr_en;
    reg  d_fifo_rd_en;
+   reg [C_M_AXIS_DATA_WIDTH+C_M_AXIS_DATA_WIDTH/8+1] d_fifo_din;
    wire d_fifo_nearly_full;
    wire d_fifo_empty;
 
@@ -124,8 +121,7 @@ module rate_limiter
    wire m_fifo_empty;
 
    reg [L2_IFSM_STATES-1:0] ifsm_state, ifsm_state_next;
-   reg [BP_COUNT_BITS-1:0] bp_config_r, bp_config_r_next; 
-   reg [BP_COUNT_BITS-1:0] bp_count_r, bp_count_r_next;
+   reg [TSTAMP_BITS-1:0]    timer_r;
 
    reg [L2_RFSM_STATES-1:0] rfsm_state, rfsm_state_next;
  
@@ -137,7 +133,7 @@ module rate_limiter
           .MAX_DEPTH_BITS(L2_MAX_DEPTH)
       )
       data_fifo
-        (.din         ({s_axis_tlast, s_axis_tkeep, s_axis_tdata}),     // Data in
+        (.din         (d_fifo_din),     // Data in
          .wr_en       (d_fifo_wr_en),       // Write enable
          .rd_en       (d_fifo_rd_en),       // Read the next word
          .dout        ({m_axis_tlast, m_axis_tkeep, m_axis_tdata}),
@@ -175,49 +171,40 @@ module rate_limiter
 
         d_fifo_wr_en = 0;
         m_fifo_wr_en = 0;
-        bp_config_r_next = bp_config_r;
-        bp_count_r_next = bp_count_r;
+
+        s_axis_tready = 1;
+
+        d_fifo_din = {s_axis_tlast, s_axis_tkeep, s_axis_tdata};
 
         case(ifsm_state)
             WAIT_START: begin
-                s_axis_tready = 1;
+                // Write the first word of the pkt
                 if (s_axis_tvalid) begin
                     d_fifo_wr_en = 1;
                     m_fifo_wr_en = 1;
-                    bp_config_r_next = s_axis_tuser[BP_COUNT_POS+BP_COUNT_BITS-1 : BP_COUNT_POS];
-                    if (bp_config_r_next == 0) begin
-                        ifsm_state_next = RCV_WORD;
-                    end
-                    else begin
-                        ifsm_state_next = ASSERT_BP;
-                    end
+                    ifsm_state_next = WORD_TWO; // NOTE: assumes pkts are at least 2 words
                 end
             end
 
-            ASSERT_BP: begin
-                s_axis_tready = 0;
-                if (bp_count_r >= bp_config_r) begin
-                    bp_count_r_next = 1;
-                    ifsm_state_next = RCV_WORD;
-                end
-                else begin
-                    bp_count_r_next = bp_count_r + 1;
-                end
-            end
-
-            RCV_WORD: begin
-                s_axis_tready = 1;
+            WORD_TWO: begin
                 if (s_axis_tvalid) begin
                     d_fifo_wr_en = 1;
+                    d_fifo_din = { 1'b1,
+                                   {(C_M_AXIS_DATA_WIDTH / 8){1'b1}},
+                                   {timer_r, s_axis_tdata[C_M_AXIS_DATA_WIDTH-TSTAMP_BITS-1:0]}
+                                 };
                     if (s_axis_tlast) begin
                         ifsm_state_next = WAIT_START;
                     end
                     else begin
-                        if (bp_config_r == 0)
-                            ifsm_state_next = RCV_WORD;
-                        else
-                            ifsm_state_next = ASSERT_BP;
+                        ifsm_state_next = FINISH_PKT;
                     end
+                end
+            end
+
+            FINISH_PKT: begin
+                if (s_axis_tvalid & s_axis_tlast) begin
+                    ifsm_state_next = WAIT_START;
                 end
             end
         endcase
@@ -226,13 +213,11 @@ module rate_limiter
     always @(posedge axis_aclk) begin
         if (~axis_resetn) begin
             ifsm_state <= WAIT_START;
-            bp_config_r <= 0;
-            bp_count_r <= 1;
+            timer_r <= 0;
         end
         else begin
             ifsm_state <= ifsm_state_next;
-            bp_config_r <= bp_config_r_next;
-            bp_count_r <= bp_count_r_next;
+            timer_r <= timer_r + 1;
         end
     end
 
