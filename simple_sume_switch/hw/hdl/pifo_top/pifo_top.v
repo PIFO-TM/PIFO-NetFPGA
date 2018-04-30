@@ -410,29 +410,10 @@ module pifo_top
                 rank_in_val = rank_in_r; // used to compute insert_reg, TODO: is this going to work?
                 if (insert_reg) begin
                     // insert into reg
-                    pr_rank_in = rank_in_r;
-                    pr_meta_in = meta_in_r;
-                    pr_insert = 1;
-                    if (pr_full & ~remove) begin
-                        // kick the pr's max value to the skip lists
-                        if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
-                            // can insert directly into the selected skip list
-                            sl_rank_in[final_enq_sel_sl_r] = pr_max_rank;
-                            sl_meta_in[final_enq_sel_sl_r] = pr_max_meta;
-                            sl_insert[final_enq_sel_sl_r] = 1;
-                        end
-                        else begin
-                            // keep looking for a skip list to insert into
-                            rank_in_r_next = pr_max_rank;
-                            meta_in_r_next = pr_max_meta;
-                            ifsm_state_next = INSERT_SL;
-                        end
-                    end
+                    ifsm_state_next = INSERT_REG;
                 end
                 else if (insert_unknown) begin
                     // don't know where to insert into so take some more time to figure it out
-                    rank_in_r_next = rank_in_r;
-                    meta_in_r_next = meta_in_r;
                     ifsm_state_next = INSERT_SEARCH;
                 end
                 else begin
