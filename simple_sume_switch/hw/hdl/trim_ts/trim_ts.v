@@ -53,7 +53,9 @@ module trim_ts
     parameter C_M_AXIS_DATA_WIDTH  = 256,
     parameter C_S_AXIS_DATA_WIDTH  = 256,
     parameter C_M_AXIS_TUSER_WIDTH = 128,
-    parameter C_S_AXIS_TUSER_WIDTH = 128
+    parameter C_S_AXIS_TUSER_WIDTH = 128,
+
+    parameter Q_SIZE_BITS = 16
 )
 (
     // Global Ports
@@ -74,7 +76,13 @@ module trim_ts
     input [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_tuser,
     input                                          s_axis_tvalid,
     output reg                                     s_axis_tready,
-    input                                          s_axis_tlast
+    input                                          s_axis_tlast,
+
+    // Queue Size Data
+    input [Q_SIZE_BITS-1:0]  qsize_0,
+    input [Q_SIZE_BITS-1:0]  qsize_1,
+    input [Q_SIZE_BITS-1:0]  qsize_2,
+    input [Q_SIZE_BITS-1:0]  qsize_3
 
 );
 
@@ -187,11 +195,12 @@ module trim_ts
             end
 
             WORD_TWO: begin
+                // Write the second word of the pkt which includes the queue size info and timestamp
                 if (s_axis_tvalid) begin
                     d_fifo_wr_en = 1;
                     d_fifo_din = { 1'b1,
                                    {(C_M_AXIS_DATA_WIDTH / 8){1'b1}},
-                                   {timer_r, s_axis_tdata[C_M_AXIS_DATA_WIDTH-TSTAMP_BITS-1:0]}
+                                   {timer_r, qsize_3, qsize_2, qsize_1, qsize_0, s_axis_tdata[C_M_AXIS_DATA_WIDTH-TSTAMP_BITS-4*Q_SIZE_BITS-1:0]}
                                  };
                     if (s_axis_tlast) begin
                         ifsm_state_next = WAIT_START;

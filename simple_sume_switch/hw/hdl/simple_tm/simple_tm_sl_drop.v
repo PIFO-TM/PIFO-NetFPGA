@@ -67,7 +67,8 @@ module simple_tm_sl_drop
     parameter NUM_SKIP_LISTS       = 12,
     // Queue params
     parameter NUM_QUEUES           = 4,
-    parameter QUEUE_LIMIT          = STORAGE_MAX_PKTS/NUM_QUEUES 
+    parameter QUEUE_LIMIT          = STORAGE_MAX_PKTS/NUM_QUEUES,
+    parameter Q_SIZE_BITS          = 16
 )
 (
     // Global Ports
@@ -88,7 +89,12 @@ module simple_tm_sl_drop
     input [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_tuser,
     input                                          s_axis_tvalid,
     output reg                                     s_axis_tready,
-    input                                          s_axis_tlast
+    input                                          s_axis_tlast,
+
+    output [Q_SIZE_BITS-1:0]                       qsize_0,
+    output [Q_SIZE_BITS-1:0]                       qsize_1,
+    output [Q_SIZE_BITS-1:0]                       qsize_2,
+    output [Q_SIZE_BITS-1:0]                       qsize_3
 
 );
 
@@ -119,7 +125,6 @@ module simple_tm_sl_drop
 
    localparam RANK_WIDTH = 16;
    localparam Q_ID_WIDTH = 32;
-   localparam Q_SIZE_BITS = 32;
 
    localparam MAX_PKT_SIZE = 24; // measured in 64B chunks
 
@@ -544,6 +549,11 @@ wire [Q_SIZE_BITS-1:0] q_size_1 = q_size_r[1];
 wire [Q_SIZE_BITS-1:0] q_size_2 = q_size_r[2];
 wire [Q_SIZE_BITS-1:0] q_size_3 = q_size_r[3];
 
+// debugging outputs
+assign qsize_0 = q_size_r[0];
+assign qsize_1 = q_size_r[1];
+assign qsize_2 = q_size_r[2];
+assign qsize_3 = q_size_r[3];
 
 //`ifdef COCOTB_SIM
 //initial begin
