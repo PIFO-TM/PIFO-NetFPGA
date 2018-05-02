@@ -10,7 +10,7 @@ from cocotb.axi4stream import AXI4StreamMaster, AXI4StreamSlave, AXI4StreamStats
 from cocotb.result import TestFailure
 
 from metadata import Metadata
-from scapy.all import Ether, IP, UDP, hexdump, rdpcap
+from scapy.all import Ether, IP, TCP, hexdump, rdpcap
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -38,7 +38,7 @@ NUM_QUEUES = 4
 INGRESS_LINK_RATE = 10 # Gbps
 EGRESS_LINK_RATE = 4 # Gbps
 NUM_PKTS = 1500
-#NUM_PKTS = 10
+#NUM_PKTS = 75
 
 # # weighted round robin
 # PCAP_FILE = 'sched_data/weighted-round-robin/pkts.pcap'
@@ -53,6 +53,7 @@ RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000
 IDLE_TIMEOUT = PERIOD*1000
 RATE_AVG_INTERVAL = 1000 # ns
+#RATE_AVG_INTERVAL = 20000 # ns
 
 BP_COUNT = 256/(EGRESS_LINK_RATE*5) + 4
 
@@ -78,7 +79,8 @@ def make_pkts_meta_in():
     with open(RANK_FILE) as f:
         ranks_in = json.load(f)
 
-    pkts_in = [p/('\x00'*(1500 - len(p))) for p in pkts_in[0:NUM_PKTS]]
+#    pkts_in = [Ether(dst=p[Ether].dst, src=p[Ether].src)/IP(src=p[IP].src, dst=p[IP].dst)/TCP(sport=p.sport, dport=p.dport)/('\x00'*(1500 - 54)) for p in pkts_in[0:NUM_PKTS]]
+    pkts_in =  pkts_in[0:NUM_PKTS]
     ranks_in = ranks_in[0:NUM_PKTS]
     assert(len(pkts_in) == len(ranks_in))
 
@@ -125,10 +127,6 @@ def test_sched_alg_demo(dut):
     yield reset_dut(dut)
     yield ClockCycles(dut.axis_aclk, START_DELAY)
 
-#    # start recording queue_sizes
-#    q_stats = QueueStats(dut, NUM_QUEUES)
-#    q_stats_thread = cocotb.fork(q_stats.start())
-
     # read the pkts and rank values
     pkts_in, meta_in, ranks_in = make_pkts_meta_in()
 
@@ -151,10 +149,6 @@ def test_sched_alg_demo(dut):
 
     # Wait for the pkt_slave to finish (or timeout)
     yield pkt_slave_thread.join()
-
-#    # stop the q_stats
-#    q_stats.stop()
-#    yield q_stats_thread.join()
 
     pkts_out = pkt_slave.pkts
     meta_out = pkt_slave.metadata
@@ -180,7 +174,6 @@ def test_sched_alg_demo(dut):
 
     # plot input / output rates
     plot_stats(input_log_pkts, output_log_pkts, EGRESS_LINK_RATE)
-#    plot_queues(q_stats.q_sizes)
 
     font = {'family' : 'normal',
             'weight' : 'bold',
