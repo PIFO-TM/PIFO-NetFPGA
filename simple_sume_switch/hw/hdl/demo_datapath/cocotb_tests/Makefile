@@ -19,6 +19,7 @@ VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_reg/min.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_reg/max.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/det_skip_list/det_skip_list.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_top/pifo_top.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/axi_stream_fifo/axi_stream_fifo.v
 
 # ===================================== #
 

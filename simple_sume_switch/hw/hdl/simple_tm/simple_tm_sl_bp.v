@@ -83,7 +83,7 @@ module simple_tm_sl_bp
     input [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_tkeep,
     input [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_tuser,
     input                                          s_axis_tvalid,
-    output reg                                     s_axis_tready,
+    output                                         s_axis_tready,
     input                                          s_axis_tlast
 
 );
@@ -115,6 +115,13 @@ module simple_tm_sl_bp
    localparam RANK_WIDTH = 16; //32;
 
    //---------------------- Wires and Regs ---------------------------- 
+
+   wire [C_S_AXIS_DATA_WIDTH - 1:0]              s_axis_fifo_tdata;
+   wire [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_fifo_tkeep;
+   wire [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_fifo_tuser;
+   wire                                          s_axis_fifo_tvalid;
+   reg                                           s_axis_fifo_tready;
+   wire                                          s_axis_fifo_tlast;
 
    reg  s_axis_tvalid_storage;
    wire s_axis_tready_storage;
@@ -149,6 +156,28 @@ module simple_tm_sl_bp
  
    //-------------------- Modules and Logic ---------------------------
 
+   /* Top level FIFO to help with timing */
+   axi_stream_fifo axi_stream_fifo_inst
+   (
+       // Global Ports
+       .axis_aclk (axis_aclk),
+       .axis_resetn (axis_resetn),
+       // pkt_storage output pkts
+       .m_axis_tdata  (s_axis_fifo_tdata),
+       .m_axis_tkeep  (s_axis_fifo_tkeep),
+       .m_axis_tuser  (s_axis_fifo_tuser),
+       .m_axis_tvalid (s_axis_fifo_tvalid),
+       .m_axis_tready (s_axis_fifo_tready),
+       .m_axis_tlast  (s_axis_fifo_tlast),
+       // pkt_storage input pkts
+       .s_axis_tdata  (s_axis_tdata),
+       .s_axis_tkeep  (s_axis_tkeep),
+       .s_axis_tuser  (s_axis_tuser),
+       .s_axis_tvalid (s_axis_tvalid),
+       .s_axis_tready (s_axis_tready),
+       .s_axis_tlast  (s_axis_tlast)
+   );
+
    /* Pkt storage */
    pifo_pkt_storage
    #(
@@ -176,12 +205,12 @@ module simple_tm_sl_bp
        .m_axis_pkt_tready (m_axis_tready),
        .m_axis_pkt_tlast (m_axis_tlast),
        // pkt_storage input pkts
-       .s_axis_pkt_tdata  (s_axis_tdata),
-       .s_axis_pkt_tkeep  (s_axis_tkeep),
-       .s_axis_pkt_tuser  (s_axis_tuser),
+       .s_axis_pkt_tdata  (s_axis_fifo_tdata),
+       .s_axis_pkt_tkeep  (s_axis_fifo_tkeep),
+       .s_axis_pkt_tuser  (s_axis_fifo_tuser),
        .s_axis_pkt_tvalid (s_axis_tvalid_storage),
        .s_axis_pkt_tready (s_axis_tready_storage),
-       .s_axis_pkt_tlast  (s_axis_tlast),
+       .s_axis_pkt_tlast  (s_axis_fifo_tlast),
        // pkt_storage output pointers (write result output interface)
        .m_axis_ptr_tdata  (storage_ptr_out_tdata),
        .m_axis_ptr_tvalid (storage_ptr_out_tvalid),
@@ -229,7 +258,7 @@ module simple_tm_sl_bp
       ifsm_state_next   = ifsm_state;
       ifsm_pifo_state_next = ifsm_pifo_state;
 
-      s_axis_tready = s_axis_tready_storage;
+      s_axis_fifo_tready = s_axis_tready_storage;
 
       pifo_rank_in_r_next = pifo_rank_in_r;
       pifo_meta_in_r_next = pifo_meta_in_r;
@@ -237,14 +266,14 @@ module simple_tm_sl_bp
       case(ifsm_state)
           WAIT_START: begin
               // don't assert tready until storage is ready and we're ready to write to the pifo
-              s_axis_tready = s_axis_tready_storage & ifsm_pifo_ready;
+              s_axis_fifo_tready = s_axis_tready_storage & ifsm_pifo_ready;
               // Wait until the first word of the pkt
-              if (s_axis_tready && s_axis_tvalid) begin
+              if (s_axis_fifo_tready && s_axis_fifo_tvalid) begin
                   // write the 1st word of the pkt to storage
                   s_axis_tvalid_storage = 1;
                   // Kick off the PIFO writing state machine
                   ifsm_pifo_state_next = WRITE_PIFO;
-                  pifo_rank_in_r_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
+                  pifo_rank_in_r_next = s_axis_fifo_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
                   pifo_meta_in_r_next = storage_ptr_out_tdata;
                   // TODO: check that storage_ptr_out_tvalid == 1
                   // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
@@ -258,9 +287,9 @@ module simple_tm_sl_bp
           end
 
           FINISH_PKT: begin
-              s_axis_tvalid_storage = s_axis_tvalid;
+              s_axis_tvalid_storage = s_axis_fifo_tvalid;
               // Wait until the end of the pkt before going back to WRITE_STORAGE state
-              if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
+              if (s_axis_fifo_tready && s_axis_fifo_tvalid && s_axis_fifo_tlast) begin
                   ifsm_state_next = WAIT_START;
               end
               else begin

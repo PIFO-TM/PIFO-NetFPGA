@@ -88,7 +88,7 @@ module simple_tm_sl_drop
     input [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_tkeep,
     input [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_tuser,
     input                                          s_axis_tvalid,
-    output reg                                     s_axis_tready,
+    output                                         s_axis_tready,
     input                                          s_axis_tlast,
 
     output [Q_SIZE_BITS-1:0]                       qsize_0,
@@ -139,6 +139,13 @@ module simple_tm_sl_drop
 
    //---------------------- Wires and Regs ---------------------------- 
 
+   wire [C_S_AXIS_DATA_WIDTH - 1:0]              s_axis_fifo_tdata;
+   wire [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_fifo_tkeep;
+   wire [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_fifo_tuser;
+   wire                                          s_axis_fifo_tvalid;
+   reg                                           s_axis_fifo_tready;
+   wire                                          s_axis_fifo_tlast;
+
    reg  s_axis_tvalid_storage;
    wire s_axis_tready_storage;
 
@@ -188,6 +195,28 @@ module simple_tm_sl_drop
  
    //-------------------- Modules and Logic ---------------------------
 
+   /* Top level FIFO to help with timing */
+   axi_stream_fifo axi_stream_fifo_inst
+   (
+       // Global Ports
+       .axis_aclk (axis_aclk),
+       .axis_resetn (axis_resetn),
+       // pkt_storage output pkts
+       .m_axis_tdata  (s_axis_fifo_tdata),
+       .m_axis_tkeep  (s_axis_fifo_tkeep),
+       .m_axis_tuser  (s_axis_fifo_tuser),
+       .m_axis_tvalid (s_axis_fifo_tvalid),
+       .m_axis_tready (s_axis_fifo_tready),
+       .m_axis_tlast  (s_axis_fifo_tlast),
+       // pkt_storage input pkts
+       .s_axis_tdata  (s_axis_tdata),
+       .s_axis_tkeep  (s_axis_tkeep),
+       .s_axis_tuser  (s_axis_tuser),
+       .s_axis_tvalid (s_axis_tvalid),
+       .s_axis_tready (s_axis_tready),
+       .s_axis_tlast  (s_axis_tlast)
+   );
+
    /* Pkt storage */
    pifo_pkt_storage
    #(
@@ -215,12 +244,12 @@ module simple_tm_sl_drop
        .m_axis_pkt_tready (m_axis_tready),
        .m_axis_pkt_tlast (m_axis_tlast),
        // pkt_storage input pkts
-       .s_axis_pkt_tdata  (s_axis_tdata),
-       .s_axis_pkt_tkeep  (s_axis_tkeep),
-       .s_axis_pkt_tuser  (s_axis_tuser),
+       .s_axis_pkt_tdata  (s_axis_fifo_tdata),
+       .s_axis_pkt_tkeep  (s_axis_fifo_tkeep),
+       .s_axis_pkt_tuser  (s_axis_fifo_tuser),
        .s_axis_pkt_tvalid (s_axis_tvalid_storage),
        .s_axis_pkt_tready (s_axis_tready_storage),
-       .s_axis_pkt_tlast  (s_axis_tlast),
+       .s_axis_pkt_tlast  (s_axis_fifo_tlast),
        // pkt_storage output pointers (write result output interface)
        .m_axis_ptr_tdata  (storage_ptr_out_tdata),
        .m_axis_ptr_tvalid (storage_ptr_out_tvalid),
@@ -268,7 +297,7 @@ module simple_tm_sl_drop
       ifsm_state_next   = ifsm_state;
       ifsm_pifo_state_next = ifsm_pifo_state;
 
-      s_axis_tready = 1;
+      s_axis_fifo_tready = 1;
 
       pifo_insert = 0;
       pifo_rank_in = 0;
@@ -277,13 +306,13 @@ module simple_tm_sl_drop
       case(ifsm_state)
           WAIT_START: begin
               // Wait until the first word of the pkt
-              if (s_axis_tready && s_axis_tvalid) begin
+              if (s_axis_fifo_tready && s_axis_fifo_tvalid) begin
                   if (s_axis_tready_storage & ifsm_pifo_ready & (q_size_r[s_q_id] < QUEUE_LIMIT - MAX_PKT_SIZE)) begin
                       // write the 1st word of the pkt to storage
                       s_axis_tvalid_storage = 1;
                       // Kick off the PIFO writing state machine
                       ifsm_pifo_state_next = WRITE_PIFO;
-                      pifo_rank_in_r_next = s_axis_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
+                      pifo_rank_in_r_next = s_axis_fifo_tuser[RANK_POS+RANK_WIDTH-1 : RANK_POS];
                       pifo_meta_in_r_next = storage_ptr_out_tdata;
                       // TODO: static simulation check that storage_ptr_out_tvalid == 1
                       // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
@@ -309,8 +338,8 @@ module simple_tm_sl_drop
           FINISH_PKT: begin
               pkt_in_accepted = 1; 
               // Wait until the end of the pkt before going back to WAIT_START state
-              s_axis_tvalid_storage = s_axis_tvalid;
-              if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
+              s_axis_tvalid_storage = s_axis_fifo_tvalid;
+              if (s_axis_fifo_tready && s_axis_fifo_tvalid && s_axis_fifo_tlast) begin
                   ifsm_state_next = WAIT_START;
               end
               else begin
@@ -322,7 +351,7 @@ module simple_tm_sl_drop
               pkt_in_accepted = 0; 
               s_axis_tvalid_storage = 0;
               // Wait until the end of the pkt before going back to WRITE_STORAGE state
-              if (s_axis_tready && s_axis_tvalid && s_axis_tlast) begin
+              if (s_axis_fifo_tready && s_axis_fifo_tvalid && s_axis_fifo_tlast) begin
                   ifsm_state_next = WAIT_START;
               end
               else begin
@@ -379,9 +408,9 @@ module simple_tm_sl_drop
    integer j;
    always @(*) begin
       // q_id on the input side
-      curr_s_q_id = s_axis_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
+      curr_s_q_id = s_axis_fifo_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
       if (curr_s_q_id >= NUM_QUEUES)
-          $display("WARNING: q_id on s_axis_tuser bus packet out of allowable range, q_id = %d\n", curr_s_q_id);
+          $display("WARNING: q_id on s_axis_fifo_tuser bus packet out of allowable range, q_id = %d\n", curr_s_q_id);
 
       // q_id on the output side
       curr_m_q_id = m_axis_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
@@ -404,7 +433,7 @@ module simple_tm_sl_drop
 
       case(s_q_state)
           S_Q_WAIT_START: begin
-              if (s_axis_tvalid & s_axis_tready) begin
+              if (s_axis_fifo_tvalid & s_axis_fifo_tready) begin
                   s_q_id = curr_s_q_id;
                   if (pkt_in_accepted) begin
                       s_q_inc_val = 1;
@@ -420,7 +449,7 @@ module simple_tm_sl_drop
 
           S_Q_WAIT_END_ENQ: begin
               // count 64B chunks of the packet (i.e. increment every other word, starting with the first word of the pkt)
-              if (s_axis_tvalid & s_axis_tready) begin
+              if (s_axis_fifo_tvalid & s_axis_fifo_tready) begin
                   if (s_q_update_size_r) begin
                       s_q_inc_val = 1;
                       s_q_update_size_r_next = 0;
@@ -431,13 +460,13 @@ module simple_tm_sl_drop
                   end
               end
 
-              if (s_axis_tvalid & s_axis_tready & s_axis_tlast) begin
+              if (s_axis_fifo_tvalid & s_axis_fifo_tready & s_axis_fifo_tlast) begin
                   s_q_state_next = S_Q_WAIT_START;
               end
           end
 
           S_Q_WAIT_END_DROP: begin
-              if (s_axis_tvalid & s_axis_tready & s_axis_tlast) begin
+              if (s_axis_fifo_tvalid & s_axis_fifo_tready & s_axis_fifo_tlast) begin
                   s_q_state_next = S_Q_WAIT_START;
               end
           end
