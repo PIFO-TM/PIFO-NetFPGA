@@ -16,13 +16,22 @@ from scapy.all import Ether, IP, UDP, hexdump
 import sys, os
 import json
 
-NUM_PKTS = 30
+NUM_PKTS = 50
 
 RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000
 IDLE_TIMEOUT = PERIOD*1000
 
 DEBUG = True
+
+@cocotb.coroutine
+def wait_pifo_busy(dut):
+    # wait for the pifo to finish resetting
+    yield FallingEdge(dut.axis_aclk)
+    while dut.simple_tm_inst.pifo_busy.value:
+        yield RisingEdge(dut.axis_aclk)
+        yield FallingEdge(dut.axis_aclk)
+    yield RisingEdge(dut.axis_aclk)
 
 @cocotb.test()
 def test_simple_tm(dut):
@@ -40,11 +49,7 @@ def test_simple_tm(dut):
     dut._log.debug("Out of reset")
 
     # wait for the pifo to finish resetting
-    yield FallingEdge(dut.axis_aclk)
-    while dut.simple_tm_inst.pifo_busy.value:
-        yield RisingEdge(dut.axis_aclk)
-        yield FallingEdge(dut.axis_aclk)
-    yield RisingEdge(dut.axis_aclk)
+    yield wait_pifo_busy(dut)
 
     yield ClockCycles(dut.axis_aclk, 100)
     dut.m_axis_tready <= 0
@@ -56,9 +61,6 @@ def test_simple_tm(dut):
         # build a packet
         pkt = Ether(dst='aa:aa:aa:aa:aa:aa', src='bb:bb:bb:bb:bb:bb')
         pkt = pkt / ('\x11'*18 + '\x22'*32)
-#        pkt = pkt / ('\x11'*18 + '\x22'*32 + '\x33'*32 + '\x44'*32 + '\x55'*16)
-#        pkt = pkt / ('\x11'*18 + '\x22'*32 + '\x33'*32 + '\x44'*32 + '\x55'*32 + '\x66'*32 + '\x77'*32 + '\x88'*32 + '\x99'*16)
-#        pkt = pkt / ('\x11'*(pkt_len - 14))
 
         rank = random.randint(0, 100)
     
@@ -81,6 +83,8 @@ def test_simple_tm(dut):
     # Send pkts and metadata in the HW sim
     yield pkt_master.write_pkts(pkts_in, meta_in)
 
+    # wait for pifo to no longer be busy
+    yield wait_pifo_busy(dut)
     # delay between writing pkts and reading them out
     yield ClockCycles(dut.axis_aclk, 25)
     # wait for the pifo to finish the final enqueue 
@@ -141,6 +145,20 @@ def test_simple_tm(dut):
             print 'exp_meta = {}'.format(exp_meta.summary())
             print 'meta = {}'.format(meta.summary())
             error = True
+
+    print "******************"
+    print "Checking for duplicates:"
+    print "******************"
+    for r, i in zip(actual_ranks, range(len(actual_ranks))):
+        try:
+            ranks_in.remove(r)
+        except ValueError as e:
+            print 'ERROR: output rank ({}) not in input set'.format(r)
+            print e
+            error = True
+    if len(ranks_in) > 0:
+        print 'ERROR: not all ranks removed: {}'.format(ranks_in)
+        error = True
 
     yield ClockCycles(dut.axis_aclk, 20)
 
