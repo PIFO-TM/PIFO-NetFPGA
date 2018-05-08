@@ -41,6 +41,8 @@ module pifo_reg
 	reg insert_ltch;
 	reg calc_min_max;
 	integer i, j;
+    reg [RANK_WIDTH-1:0] rank_in_ltch;
+    reg [META_WIDTH-1:0] meta_in_ltch;
 	
 	always @*
 	begin
@@ -159,14 +161,16 @@ module pifo_reg
 				num_entries <= num_entries - 1;
 			    calc_min_max <= 1;
 				insert_ltch <= insert;
+                rank_in_ltch <= rank_in;
+                meta_in_ltch <= meta_in;
 		    end
 		    else if (insert == 1'b1 || insert_ltch == 1'b1)
 		    begin
 			    // Insert new value at end of register
 				if (num_entries < REG_WIDTH)
 				begin
-		            rank[num_entries] <= rank_in;
-			        meta[num_entries] <= meta_in;
+		            rank[num_entries] <= (insert) ? rank_in : rank_in_ltch;
+			        meta[num_entries] <= (insert) ? meta_in : meta_in_ltch;
 				    valid[num_entries] <= 1;
 					if (num_entries == REG_WIDTH-1)
 					    full <= 1'b1;
@@ -177,12 +181,20 @@ module pifo_reg
 				else
 				begin
 				    // If new value is smaller than max
-                    if (rank_in < max_rank[COMP_LVLS-1][0])
-					begin
-						// Replace largest value
-						rank[max_idx[COMP_LVLS-1][0]] <= rank_in;
-						meta[max_idx[COMP_LVLS-1][0]] <= meta_in;
-					end
+                    if (insert) begin
+                        if (rank_in < max_rank[COMP_LVLS-1][0]) begin
+					    	// Replace largest value
+					    	rank[max_idx[COMP_LVLS-1][0]] <= rank_in;
+					    	meta[max_idx[COMP_LVLS-1][0]] <= meta_in;
+					    end
+                    end
+                    else begin
+                        if (rank_in_ltch < max_rank[COMP_LVLS-1][0]) begin
+					    	// Replace largest value
+					    	rank[max_idx[COMP_LVLS-1][0]] <= rank_in_ltch;
+					    	meta[max_idx[COMP_LVLS-1][0]] <= meta_in_ltch;
+					    end
+                    end
 					full <= 1'b1;
 				end
 				empty <= 1'b0;
