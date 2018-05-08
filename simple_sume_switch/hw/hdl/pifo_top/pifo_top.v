@@ -58,6 +58,7 @@ module pifo_top
     wire                              pr_full;
     wire [META_WIDTH+TSTAMP_BITS-1:0] pr_meta_out;
 
+    reg pr_insert_last_r, pr_insert_last_r_next; 
     reg direct_pr_insert;
 
     reg [NUM_SKIP_LISTS-1:0]            sl_insert;
@@ -236,7 +237,7 @@ module pifo_top
             tstamp_out_lvls[0][s] = sl_meta_out[s][TSTAMP_BITS-1:0];
             deq_sl_sel[0][s] = s;
             // wait for each skip list to either assert valid_out or be empty before removing anything
-            val_or_empty[s] = sl_valid_out[s] | (sl_num_entries[s] == 0);
+//            val_or_empty[s] = sl_valid_out[s] | (sl_num_entries[s] == 0);
             sl_empty[s] = (sl_num_entries[s] == 0);
         end
 
@@ -247,61 +248,78 @@ module pifo_top
             tstamp_out_lvls[0][u] = -1;
             deq_sl_sel[0][u] = u;
         end
+    end
 
+    always @(posedge clk) begin
         /* Select a skip list to remove from */
-        for (r=0; r<NUM_LEVELS; r=r+1) begin  // loop over each level
-            for (q=0; q<2**(NUM_LEVELS-r); q=q+2) begin // loop over each comparator in each level
-                valid_out_lvls[r+1][q/2] = valid_out_lvls[r][q] | valid_out_lvls[r][q+1];
-                if (valid_out_lvls[r][q] & valid_out_lvls[r][q+1]) begin
-                    // both skip lists are available
-                    // first check rank values
-                    if (rank_out_lvls[r][q] < rank_out_lvls[r][q+1]) begin
-                        rank_out_lvls[r+1][q/2] = rank_out_lvls[r][q];
-                        tstamp_out_lvls[r+1][q/2] = tstamp_out_lvls[r][q];
-                        deq_sl_sel[r+1][q/2] = deq_sl_sel[r][q];
-                    end
-                    else if (rank_out_lvls[r][q] > rank_out_lvls[r][q+1]) begin
-                        rank_out_lvls[r+1][q/2] = rank_out_lvls[r][q+1];
-                        tstamp_out_lvls[r+1][q/2] = tstamp_out_lvls[r][q+1];
-                        deq_sl_sel[r+1][q/2] = deq_sl_sel[r][q+1];
-                    end
-                    // next check timestamps
-                    else if (tstamp_out_lvls[r][q] < tstamp_out_lvls[r][q+1]) begin
-                        rank_out_lvls[r+1][q/2] = rank_out_lvls[r][q];
-                        tstamp_out_lvls[r+1][q/2] = tstamp_out_lvls[r][q];
-                        deq_sl_sel[r+1][q/2] = deq_sl_sel[r][q];
-                    end
-                    else begin
-                        rank_out_lvls[r+1][q/2] = rank_out_lvls[r][q+1];
-                        tstamp_out_lvls[r+1][q/2] = tstamp_out_lvls[r][q+1];
-                        deq_sl_sel[r+1][q/2] = deq_sl_sel[r][q+1];
-                    end
-                end
-                else if (valid_out_lvls[r][q]) begin
-                    rank_out_lvls[r+1][q/2] = rank_out_lvls[r][q];
-                    tstamp_out_lvls[r+1][q/2] = tstamp_out_lvls[r][q];
-                    deq_sl_sel[r+1][q/2] = deq_sl_sel[r][q];
-                end
-                else if (valid_out_lvls[r][q+1]) begin
-                    rank_out_lvls[r+1][q/2] = rank_out_lvls[r][q+1];
-                    tstamp_out_lvls[r+1][q/2] = tstamp_out_lvls[r][q+1];
-                    deq_sl_sel[r+1][q/2] = deq_sl_sel[r][q+1];
-                end
-                else begin
-                    // neither skip list is available
-                    rank_out_lvls[r+1][q/2] = -1;
-                    tstamp_out_lvls[r+1][q/2] = -1;
-                    deq_sl_sel[r+1][q/2] = -1;
+        if (rst) begin
+            for (r=0; r<NUM_LEVELS; r=r+1) begin  // loop over each level
+                for (q=0; q<2**(NUM_LEVELS-r); q=q+2) begin // loop over each comparator in each level
+                    valid_out_lvls[r+1][q/2] <= 0;
+                    rank_out_lvls[r+1][q/2] <= 0;
+                    tstamp_out_lvls[r+1][q/2] <= 0;
+                    deq_sl_sel[r+1][q/2] <= 0;
                 end
             end
         end
+        else begin
+            for (r=0; r<NUM_LEVELS; r=r+1) begin  // loop over each level
+                for (q=0; q<2**(NUM_LEVELS-r); q=q+2) begin // loop over each comparator in each level
+                    valid_out_lvls[r+1][q/2] <= valid_out_lvls[r][q] | valid_out_lvls[r][q+1];
+                    if (valid_out_lvls[r][q] & valid_out_lvls[r][q+1]) begin
+                        // both skip lists are available
+                        // first check rank values
+                        if (rank_out_lvls[r][q] < rank_out_lvls[r][q+1]) begin
+                            rank_out_lvls[r+1][q/2] <= rank_out_lvls[r][q];
+                            tstamp_out_lvls[r+1][q/2] <= tstamp_out_lvls[r][q];
+                            deq_sl_sel[r+1][q/2] <= deq_sl_sel[r][q];
+                        end
+                        else if (rank_out_lvls[r][q] > rank_out_lvls[r][q+1]) begin
+                            rank_out_lvls[r+1][q/2] <= rank_out_lvls[r][q+1];
+                            tstamp_out_lvls[r+1][q/2] <= tstamp_out_lvls[r][q+1];
+                            deq_sl_sel[r+1][q/2] <= deq_sl_sel[r][q+1];
+                        end
+                        // next check timestamps
+                        else if (tstamp_out_lvls[r][q] < tstamp_out_lvls[r][q+1]) begin
+                            rank_out_lvls[r+1][q/2] <= rank_out_lvls[r][q];
+                            tstamp_out_lvls[r+1][q/2] <= tstamp_out_lvls[r][q];
+                            deq_sl_sel[r+1][q/2] <= deq_sl_sel[r][q];
+                        end
+                        else begin
+                            rank_out_lvls[r+1][q/2] <= rank_out_lvls[r][q+1];
+                            tstamp_out_lvls[r+1][q/2] <= tstamp_out_lvls[r][q+1];
+                            deq_sl_sel[r+1][q/2] <= deq_sl_sel[r][q+1];
+                        end
+                    end
+                    else if (valid_out_lvls[r][q]) begin
+                        rank_out_lvls[r+1][q/2] <= rank_out_lvls[r][q];
+                        tstamp_out_lvls[r+1][q/2] <= tstamp_out_lvls[r][q];
+                        deq_sl_sel[r+1][q/2] <= deq_sl_sel[r][q];
+                    end
+                    else if (valid_out_lvls[r][q+1]) begin
+                        rank_out_lvls[r+1][q/2] <= rank_out_lvls[r][q+1];
+                        tstamp_out_lvls[r+1][q/2] <= tstamp_out_lvls[r][q+1];
+                        deq_sl_sel[r+1][q/2] <= deq_sl_sel[r][q+1];
+                    end
+                    else begin
+                        // neither skip list is available
+                        rank_out_lvls[r+1][q/2] <= -1;
+                        tstamp_out_lvls[r+1][q/2] <= -1;
+                        deq_sl_sel[r+1][q/2] <= -1;
+                    end
+                end
+            end
+        end
+    end
 
-        deq_condition = &val_or_empty;
+    // dequeue selection comparison tree result
+    always @(*) begin
+//        deq_condition = &val_or_empty;
         // the output is valid if the selected skip list is asserting valid_out
         //    and all skip lists are either empty or asserting valid_out
-        final_deq_sel_valid_r_next = |sl_valid_out & deq_condition;
-        final_deq_sel_sl_r_next = deq_sl_sel[NUM_LEVELS][0];
 
+        final_deq_sel_valid_r_next = valid_out_lvls[NUM_LEVELS][0]; 
+        final_deq_sel_sl_r_next = deq_sl_sel[NUM_LEVELS][0];
     end
 
     always @(posedge clk) begin
@@ -352,7 +370,7 @@ module pifo_top
         end
 
         sl_min_rank_valid = final_deq_sel_valid_r;
-        sl_min_rank = sl_rank_out[final_deq_sel_sl_r];
+        sl_min_rank = (sl_min_rank_valid) ? sl_rank_out[final_deq_sel_sl_r] : 0;
 
         rank_in_val = rank_in;
         insert_reg = (pr_max_valid && (rank_in_val < pr_max_rank)) || (sl_min_rank_valid && (rank_in_val < sl_min_rank) && ~pr_full) || (&sl_empty & ~pr_full);
@@ -381,26 +399,28 @@ module pifo_top
 
             INSERT_REG: begin
                 busy = 1;
-                pr_rank_in = rank_in_r;
-                pr_meta_in = meta_in_r;
-                pr_insert = 1;
-                ifsm_state_next = IFSM_IDLE;
-                if (pr_full & ~remove) begin
-                    // kick the pr's max value to the skip lists
-                    if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
-                        // can insert directly into the selected skip list
-                        sl_rank_in[final_enq_sel_sl_r] = pr_max_rank;
-                        sl_meta_in[final_enq_sel_sl_r] = pr_max_meta;
-                        sl_insert[final_enq_sel_sl_r] = 1;
-                    end
-                    else begin
-                        // keep looking for a skip list to insert into
-                        rank_in_r_next = pr_max_rank;
-                        meta_in_r_next = pr_max_meta;
-                        ifsm_state_next = INSERT_SL;
+                // only insert into the pifo_reg_top if we didn't do so on the previous cycle
+                if (~pr_insert_last_r) begin
+                    pr_rank_in = rank_in_r;
+                    pr_meta_in = meta_in_r;
+                    pr_insert = 1;
+                    ifsm_state_next = IFSM_IDLE;
+                    if (pr_full & ~remove) begin
+                        // kick the pr's max value to the skip lists
+                        if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
+                            // can insert directly into the selected skip list
+                            sl_rank_in[final_enq_sel_sl_r] = pr_max_rank;
+                            sl_meta_in[final_enq_sel_sl_r] = pr_max_meta;
+                            sl_insert[final_enq_sel_sl_r] = 1;
+                        end
+                        else begin
+                            // keep looking for a skip list to insert into
+                            rank_in_r_next = pr_max_rank;
+                            meta_in_r_next = pr_max_meta;
+                            ifsm_state_next = INSERT_SL;
+                        end
                     end
                 end
-
             end
 
             INSERT_SEARCH: begin
@@ -442,15 +462,19 @@ module pifo_top
          *       && we are not directly inserting into the pifo_reg
          */
         direct_pr_insert = (ifsm_state == INSERT_REG);
-        if (~pr_full & ~direct_pr_insert) begin // NOTE: removed ~remove check
+        if (~pr_full & ~direct_pr_insert & ~pr_insert_last_r) begin // NOTE: removed ~remove check
             // we should replenish the reg if the skip list dequeue selection is valid
-            if (final_deq_sel_valid_r) begin  // TODO: can we remove the dependency on final_deq_sel_valid_r_next?
+            if (final_deq_sel_valid_r & sl_valid_out[final_deq_sel_sl_r]) begin  // TODO: can we remove the dependency on final_deq_sel_valid_r_next?
                 pr_insert = 1;
                 pr_rank_in = sl_rank_out[final_deq_sel_sl_r];
                 pr_meta_in = sl_meta_out[final_deq_sel_sl_r];
                 sl_remove[final_deq_sel_sl_r] = 1;
             end
         end
+
+        // keep track of whether or not we inserted into the pifo_reg_top on the last cycle
+        pr_insert_last_r_next = pr_insert;
+
     end
 
     // ifsm state update 
@@ -459,11 +483,13 @@ module pifo_top
             ifsm_state <= IFSM_IDLE;
             rank_in_r <= 0;
             meta_in_r <= 0;
+            pr_insert_last_r <= 0;
         end
         else begin
             ifsm_state <= ifsm_state_next;
             rank_in_r <= rank_in_r_next;
             meta_in_r <= meta_in_r_next;
+            pr_insert_last_r <= pr_insert_last_r_next;
         end
     end
 
