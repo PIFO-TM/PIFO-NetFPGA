@@ -165,10 +165,11 @@ module axi_stream_fifo
         d_fifo_wr_en = 0;
         m_fifo_wr_en = 0;
 
+        s_axis_tready = ~d_fifo_nearly_full & ~m_fifo_nearly_full;
+
         case(ifsm_state)
             WAIT_START: begin
-                s_axis_tready = 1;
-                if (s_axis_tvalid) begin
+                if (s_axis_tvalid & s_axis_tready) begin
                     d_fifo_wr_en = 1;
                     m_fifo_wr_en = 1;
                     ifsm_state_next = RCV_WORD;
@@ -176,8 +177,7 @@ module axi_stream_fifo
             end
 
             RCV_WORD: begin
-                s_axis_tready = 1;
-                if (s_axis_tvalid) begin
+                if (s_axis_tvalid & s_axis_tready) begin
                     d_fifo_wr_en = 1;
                     if (s_axis_tlast) begin
                         ifsm_state_next = WAIT_START;
