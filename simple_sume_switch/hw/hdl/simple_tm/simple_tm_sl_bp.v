@@ -100,9 +100,9 @@ module simple_tm_sl_bp
 
    //--------------------- Internal Parameters-------------------------
    /* For Insertion FSM */
-   localparam WAIT_START           = 1;
-   localparam FINISH_PKT           = 2;
-   localparam IFSM_NUM_STATES      = 2;
+   localparam WAIT_START           = 0;
+   localparam FINISH_PKT           = 1;
+   localparam L2_IFSM_STATES       = 1;
 
    localparam PIFO_START           = 0;
    localparam WRITE_PIFO           = 1;
@@ -137,7 +137,7 @@ module simple_tm_sl_bp
    wire                    pifo_full;
 
    
-   reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
+   reg  [L2_IFSM_STATES-1:0]            ifsm_state, ifsm_state_next;
    reg  [RANK_WIDTH-1:0]                pifo_rank_in_r, pifo_rank_in_r_next;
    reg  [PTRS_WIDTH-1:0]                pifo_meta_in_r, pifo_meta_in_r_next;
 
@@ -258,7 +258,7 @@ module simple_tm_sl_bp
       ifsm_state_next   = ifsm_state;
       ifsm_pifo_state_next = ifsm_pifo_state;
 
-      s_axis_fifo_tready = s_axis_tready_storage;
+//      s_axis_fifo_tready = s_axis_tready_storage;
 
       pifo_rank_in_r_next = pifo_rank_in_r;
       pifo_meta_in_r_next = pifo_meta_in_r;
@@ -287,6 +287,7 @@ module simple_tm_sl_bp
           end
 
           FINISH_PKT: begin
+              s_axis_fifo_tready = s_axis_tready_storage;
               s_axis_tvalid_storage = s_axis_fifo_tvalid;
               // Wait until the end of the pkt before going back to WRITE_STORAGE state
               if (s_axis_fifo_tready && s_axis_fifo_tvalid && s_axis_fifo_tlast) begin
