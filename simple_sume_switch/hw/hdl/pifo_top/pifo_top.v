@@ -179,38 +179,53 @@ module pifo_top
             sl_num_entries_lvls[0][n] = -1;
             skip_list_sel[0][n] = n;
         end
- 
+    end
+
+    always @(posedge clk) begin 
         /* Select a skip list to insert into */
-        for (j=0; j<NUM_LEVELS; j=j+1) begin  // loop over each level
-            for (i=0; i<2**(NUM_LEVELS-j); i=i+2) begin // loop over each comparator in each level
-                sl_valid_lvls[j+1][i/2] = sl_valid_lvls[j][i] | sl_valid_lvls[j][i+1];
-                if (sl_valid_lvls[j][i] & sl_valid_lvls[j][i+1]) begin
-                    // both skip lists are available
-                    if (sl_num_entries_lvls[j][i] <= sl_num_entries_lvls[j][i+1]) begin
-                        sl_num_entries_lvls[j+1][i/2] = sl_num_entries_lvls[j][i];
-                        skip_list_sel[j+1][i/2] = skip_list_sel[j][i];
-                    end
-                    else begin
-                        sl_num_entries_lvls[j+1][i/2] = sl_num_entries_lvls[j][i+1];
-                        skip_list_sel[j+1][i/2] = skip_list_sel[j][i+1];
-                    end
-                end
-                else if (sl_valid_lvls[j][i]) begin
-                    sl_num_entries_lvls[j+1][i/2] = sl_num_entries_lvls[j][i];
-                    skip_list_sel[j+1][i/2] = skip_list_sel[j][i]; 
-                end
-                else if (sl_valid_lvls[j][i+1]) begin
-                    sl_num_entries_lvls[j+1][i/2] = sl_num_entries_lvls[j][i+1];
-                    skip_list_sel[j+1][i/2] = skip_list_sel[j][i+1]; 
-                end
-                else begin
-                    // neither skip list is available
-                    sl_num_entries_lvls[j+1][i/2] = -1;
-                    skip_list_sel[j+1][i/2] = -1;
+        if (rst) begin
+            for (j=0; j<NUM_LEVELS; j=j+1) begin  // loop over each level
+                for (i=0; i<2**(NUM_LEVELS-j); i=i+2) begin // loop over each comparator in each level
+                    sl_valid_lvls[j+1][i/2] <= 0;
+                    sl_num_entries_lvls[j+1][i/2] <= 0;
+                    skip_list_sel[j+1][i/2] <= 0;
                 end
             end
         end
- 
+        else begin
+            for (j=0; j<NUM_LEVELS; j=j+1) begin  // loop over each level
+                for (i=0; i<2**(NUM_LEVELS-j); i=i+2) begin // loop over each comparator in each level
+                    sl_valid_lvls[j+1][i/2] <= sl_valid_lvls[j][i] | sl_valid_lvls[j][i+1];
+                    if (sl_valid_lvls[j][i] & sl_valid_lvls[j][i+1]) begin
+                        // both skip lists are available
+                        if (sl_num_entries_lvls[j][i] <= sl_num_entries_lvls[j][i+1]) begin
+                            sl_num_entries_lvls[j+1][i/2] <= sl_num_entries_lvls[j][i];
+                            skip_list_sel[j+1][i/2] <= skip_list_sel[j][i];
+                        end
+                        else begin
+                            sl_num_entries_lvls[j+1][i/2] <= sl_num_entries_lvls[j][i+1];
+                            skip_list_sel[j+1][i/2] <= skip_list_sel[j][i+1];
+                        end
+                    end
+                    else if (sl_valid_lvls[j][i]) begin
+                        sl_num_entries_lvls[j+1][i/2] <= sl_num_entries_lvls[j][i];
+                        skip_list_sel[j+1][i/2] <= skip_list_sel[j][i]; 
+                    end
+                    else if (sl_valid_lvls[j][i+1]) begin
+                        sl_num_entries_lvls[j+1][i/2] <= sl_num_entries_lvls[j][i+1];
+                        skip_list_sel[j+1][i/2] <= skip_list_sel[j][i+1]; 
+                    end
+                    else begin
+                        // neither skip list is available
+                        sl_num_entries_lvls[j+1][i/2] <= -1;
+                        skip_list_sel[j+1][i/2] <= -1;
+                    end
+                end
+            end
+        end
+    end
+
+    always @(*) begin 
         final_enq_sel_valid_r_next = sl_valid_lvls[NUM_LEVELS][0];
         final_enq_sel_sl_r_next = skip_list_sel[NUM_LEVELS][0];
     end
