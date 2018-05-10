@@ -407,18 +407,9 @@ module pifo_top
                     ifsm_state_next = IFSM_IDLE;
                     if (pr_full & ~remove) begin
                         // kick the pr's max value to the skip lists
-                        if (~sl_busy_out[final_enq_sel_sl_r] && ~sl_full_out[final_enq_sel_sl_r]) begin
-                            // can insert directly into the selected skip list
-                            sl_rank_in[final_enq_sel_sl_r] = pr_max_rank;
-                            sl_meta_in[final_enq_sel_sl_r] = pr_max_meta;
-                            sl_insert[final_enq_sel_sl_r] = 1;
-                        end
-                        else begin
-                            // keep looking for a skip list to insert into
-                            rank_in_r_next = pr_max_rank;
-                            meta_in_r_next = pr_max_meta;
-                            ifsm_state_next = INSERT_SL;
-                        end
+                        rank_in_r_next = pr_max_rank;
+                        meta_in_r_next = pr_max_meta;
+                        ifsm_state_next = INSERT_SL;
                     end
                 end
             end
