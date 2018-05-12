@@ -56,10 +56,10 @@ module cocotb_tm_bp_wrapper
     parameter C_S_AXIS_TUSER_WIDTH = 128,
 
     // max num pkts the pifo can store
-    parameter PIFO_DEPTH = 64,
-    parameter PIFO_REG_DEPTH = 4,
-    parameter STORAGE_MAX_PKTS = 2048,
-    parameter NUM_SKIP_LISTS = 1
+    parameter PIFO_DEPTH = 4096,
+    parameter PIFO_REG_DEPTH = 16,
+    parameter STORAGE_MAX_PKTS = 4096,
+    parameter NUM_SKIP_LISTS = 11
 )
 (
     // Global Ports
@@ -111,6 +111,14 @@ module cocotb_tm_bp_wrapper
        .s_axis_tready (s_axis_tready),
        .s_axis_tlast  (s_axis_tlast)
    );
+
+`ifdef COCOTB_SIM
+initial begin
+  $dumpfile ("cocotb_tm_bp_wrapper_waveform.vcd");
+  $dumpvars (0,cocotb_tm_bp_wrapper);
+  #1 $display("Sim running...");
+end
+`endif
 
 endmodule // cocotb_tm_wrapper
 
