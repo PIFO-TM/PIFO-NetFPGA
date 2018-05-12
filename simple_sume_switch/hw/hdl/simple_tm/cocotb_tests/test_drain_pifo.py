@@ -20,7 +20,8 @@ import matplotlib.pyplot as plt
 import sys, os
 import json
 
-NUM_PKTS = 10
+NUM_PKTS = 2000
+EGRESS_LINK_RATE = 10
 
 RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000
@@ -29,7 +30,7 @@ IDLE_TIMEOUT = PERIOD*1000
 DEBUG = True
 
 @cocotb.test()
-def test_simple_tm(dut):
+def test_drain_pifo(dut):
     """Testing the simple_tm module 
     """
 
@@ -99,7 +100,8 @@ def test_simple_tm(dut):
     yield RisingEdge(dut.axis_aclk)
 
     # Attach an AXI4StreamSlave to the output pkt interface
-    pkt_slave = AXI4StreamSlave(dut, 'm_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT)
+    tready_delay = 256/(EGRESS_LINK_RATE*5) - 1
+    pkt_slave = AXI4StreamSlave(dut, 'm_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT, tready_delay=tready_delay)
     pkt_out_stats = AXI4StreamStats(dut, 'm_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT)
     pkt_out_stats_thread = cocotb.fork(pkt_out_stats.record_n_delays(len(pkts_in)))
 

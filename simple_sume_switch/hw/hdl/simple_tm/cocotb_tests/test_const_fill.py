@@ -16,8 +16,8 @@ from scapy.all import Ether, IP, UDP, hexdump
 import sys, os
 import json
 
-FILL_LEVEL = 30
-NUM_SAMPLES = 100
+FILL_LEVEL = 50
+NUM_SAMPLES = 10
 
 RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000
@@ -44,6 +44,15 @@ def make_pkts_and_meta(n):
         pkts_and_meta.append((rank, pkt, tuser))
     return pkts_and_meta
 
+@cocotb.coroutine
+def wait_pifo_busy(dut):
+    # wait for the pifo to finish resetting
+    yield FallingEdge(dut.axis_aclk)
+    while dut.simple_tm_inst.pifo_busy.value:
+        yield RisingEdge(dut.axis_aclk)
+        yield FallingEdge(dut.axis_aclk)
+    yield RisingEdge(dut.axis_aclk)
+
 @cocotb.test()
 def test_const_fill(dut):
     """Testing the simple_tm module with a constant fill level
@@ -60,11 +69,7 @@ def test_const_fill(dut):
     dut._log.debug("Out of reset")
 
     # wait for the pifo to finish resetting
-    yield FallingEdge(dut.axis_aclk)
-    while dut.simple_tm_inst.pifo_busy.value:
-        yield RisingEdge(dut.axis_aclk)
-        yield FallingEdge(dut.axis_aclk)
-    yield RisingEdge(dut.axis_aclk)
+    yield wait_pifo_busy(dut)
 
     yield ClockCycles(dut.axis_aclk, 100)
     dut.m_axis_tready <= 0
@@ -82,6 +87,8 @@ def test_const_fill(dut):
     # Send pkts and metadata in the HW sim
     yield pkt_master.write_pkts(pkts_in, meta_in)
 
+    # wait for the final write to complete
+    yield wait_pifo_busy(dut)
     # wait a few cycles before begining measurements 
     yield ClockCycles(dut.axis_aclk, 25)
 
@@ -97,28 +104,25 @@ def test_const_fill(dut):
     enq_delays = []
     deq_delays = []
     for i in range(NUM_SAMPLES):
-        data = make_pkts_and_meta(2)
+        data = make_pkts_and_meta(1)
         pkts_in = [tup[1] for tup in data]
         meta_in = [tup[2] for tup in data]
         pkts_meta_in += data
         # compute expected outputs
         expected_outputs.append(min(pkts_meta_in))
         pkts_meta_in.remove(min(pkts_meta_in))
-        expected_outputs.append(min(pkts_meta_in))
-        pkts_meta_in.remove(min(pkts_meta_in))
         # start recording stats
-        pkt_in_stats_thread = cocotb.fork(pkt_in_stats.record_n_delays(2))
-        pkt_out_stats_thread = cocotb.fork(pkt_out_stats.record_n_delays(2))
-        # send in two packets 
+        pkt_in_stats_thread = cocotb.fork(pkt_in_stats.record_n_enq_delays(1))
+        pkt_out_stats_thread = cocotb.fork(pkt_out_stats.record_n_deq_delays(1))
+        # send in packet 
         yield pkt_master.write_pkts(pkts_in, meta_in)
-        # Read out two packets
-        yield pkt_slave.read_n_pkts(2)
-#        # wait for stats threads to finish
-#        yield pkt_in_stats_thread.join()
-#        yield pkt_out_stats_thread.join()
+        # wait for the write to complete
+        yield wait_pifo_busy(dut)
+        # Read out packet
+        yield pkt_slave.read_n_pkts(1)
         # record results
-        enq_delays += pkt_in_stats.delays
-        deq_delays += pkt_out_stats.delays
+        enq_delays += pkt_in_stats.enq_delays
+        deq_delays += pkt_out_stats.deq_delays
         # wait a few cycles between samples
         yield ClockCycles(dut.axis_aclk, 30)
         if pkt_slave.error:

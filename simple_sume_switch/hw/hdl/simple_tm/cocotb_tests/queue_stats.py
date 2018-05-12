@@ -42,14 +42,24 @@ class QueueStats(object):
     def stop(self):
         self.finish = True
 
+def line_gen():
+    lines = ['-', '--', ':', '-.']
+    i = 0
+    while True:
+        yield lines[i]
+        i += 1
+        i = i % len(lines)
+
 def plot_queues(q_sizes):
     """ q_sizes is a dict that maps q_id to a list of queue size samples from every clock cycle
     """
+    line_generator = line_gen()
     cycles = range(len(q_sizes[0]))
     plt.figure()
     for q_id, sizes in q_sizes.items():
-        plt.plot(range(len(sizes)), sizes, linewidth=3, label='Queue {}'.format(q_id))
-    plt.title('Queue Sizes')
+        linestyle = line_generator.next()
+        plt.plot(range(len(sizes)), sizes, linewidth=5, label='Queue {}'.format(q_id), linestyle=linestyle)
+#    plt.title('Queue Sizes')
     plt.xlabel('Time (Clock Cycles)')
     plt.ylabel('Queue size (64B segments)')
     plt.legend()

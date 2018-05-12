@@ -33,7 +33,7 @@ class TM_hw_sim(object):
             sim_res = self.run_sim(num_skip_lists=num_sl)
             print 'finished sim for num_sl = {}'.format(num_sl)
             results.append(sim_res)
-        self.plot_results(num_skip_lists, results, 'num_skip_lists', 'upper right', 'num_sl')
+        self.plot_results(num_skip_lists, results, 'num_skip_lists', 'upper right', None)
 
     def test_pifo_reg_depth(self, reg_depths):
         print 'testing reg depth...'
@@ -62,9 +62,8 @@ class TM_hw_sim(object):
             results.append(sim_res)
         self.plot_results(fill_levels, results, 'fill_level', 'lower right', 'pkts')
 
-    def run_sim(self, pifo_depth=64, pifo_reg_depth=16, num_skip_lists=1, fill_level=10):
-#    def run_sim(self, pifo_depth=2048, pifo_reg_depth=32, num_skip_lists=1, fill_level=1024):
-#    def run_sim(self, pifo_depth=128, pifo_reg_depth=32, num_skip_lists=1, fill_level=1024):
+#    def run_sim(self, pifo_depth=4096, pifo_reg_depth=16, num_skip_lists=1, fill_level=2000):
+    def run_sim(self, pifo_depth=4096, pifo_reg_depth=16, num_skip_lists=1, fill_level=100):
         global ERROR
         # delete any existing RESULTS_FILE
         os.system('rm -f {}'.format(RESULTS_FILE))
@@ -114,12 +113,21 @@ class TM_hw_sim(object):
         max_deq = [r.deq_max for r in results]
 
         labels = ['avg', 'max']
+        xlabel = '{} ({})'.format(variable, units) if units is not None else '{}'.format(variable)
 
         # plot Enqueue Data
-        self.plot_data([xdata, xdata], [avg_enq, max_enq], labels, '{} ({})'.format(variable, units), 'Enq Latency (cycles)', 'Enqueue Latency vs {}'.format(variable), loc, self.enq_ax)
+#        self.plot_data([xdata, xdata], [avg_enq, max_enq], labels, '{} ({})'.format(variable, units), 'Enq Latency (cycles)', 'Enqueue Latency vs {}'.format(variable), loc, self.enq_ax)
+        self.plot_data([xdata, xdata], [avg_enq, max_enq], labels, xlabel, 'Enq Latency (cycles)', '', loc, self.enq_ax)
 
         # plot Dequeue Data
-        self.plot_data([xdata, xdata], [avg_deq, max_deq], labels, '{} ({})'.format(variable, units), 'Deq Latency (cycles)', 'Dequeue Latency vs {}'.format(variable), loc, self.deq_ax)
+#        self.plot_data([xdata, xdata], [avg_deq, max_deq], labels, '{} ({})'.format(variable, units), 'Deq Latency (cycles)', 'Dequeue Latency vs {}'.format(variable), loc, self.deq_ax)
+        self.plot_data([xdata, xdata], [avg_deq, max_deq], labels, xlabel, 'Deq Latency (cycles)', '', loc, self.deq_ax)
+
+
+        font = {'family' : 'normal',
+                'weight' : 'bold',
+                'size'   : 15}
+        matplotlib.rc('font', **font)
 
         filename = 'enq_deq_v_{}.pdf'.format(variable)
         fig = plt.gcf()
@@ -129,14 +137,37 @@ class TM_hw_sim(object):
         print 'saved plot: {}'.format(filename)
         print 'errors = {}'.format(ERROR)
 
+    def line_gen(self):
+        lines = ['-', '--', ':', '-.']
+        i = 0
+        while True:
+            yield lines[i]
+            i += 1
+            i = i % len(lines)
+
+    def marker_gen(self):
+        markers = ['o', 'v']
+        i = 0
+        while True:
+            yield markers[i]
+            i += 1
+            i = i % len(markers)
+
     def plot_data(self, xdata, ydata, labels, xlabel, ylabel, title, loc, ax):
+        line_generator = self.line_gen()
+        marker_generator = self.marker_gen()
+        max_y = 0
         for (x, y, label) in zip(xdata, ydata, labels):
-            ax.plot(x, y, marker='o', label=label)
+            max_y = max(y + [max_y])
+            linestyle = line_generator.next()
+            marker = marker_generator.next()
+            ax.plot(x, y, marker=marker, linestyle=linestyle, label=label, linewidth=5)
 
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
         ax.set_title(title)
         ax.legend(loc=loc)
+        ax.set_ylim(0, max_y*1.25)
 
 
 class Sim_results(object):

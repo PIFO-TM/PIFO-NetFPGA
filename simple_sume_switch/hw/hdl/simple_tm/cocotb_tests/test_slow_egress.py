@@ -16,7 +16,7 @@ from scapy.all import Ether, IP, UDP, hexdump
 import sys, os
 import json
 
-NUM_PKTS = 50
+NUM_PKTS = 100
 
 RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000

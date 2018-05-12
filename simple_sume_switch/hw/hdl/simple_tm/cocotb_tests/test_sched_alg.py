@@ -27,23 +27,30 @@ from stats_utils import StatsGenerator
 # PCAP_FILE = 'sched_data/strict/big_test/pkts.pcap'
 # RANK_FILE = 'sched_data/strict/big_test/ranks.json'
 # NUM_QUEUES = 2
+# INGRESS_LINK_RATE = 10 # Gbps
+# EGRESS_LINK_RATE = 4 # Gbps
+# NUM_PKTS = 3000
 
 # round robin
 PCAP_FILE = 'sched_data/round-robin/pkts.pcap'
 RANK_FILE = 'sched_data/round-robin/ranks.json'
 NUM_QUEUES = 4
+INGRESS_LINK_RATE = 10 # Gbps
+EGRESS_LINK_RATE = 4 # Gbps
+NUM_PKTS = 1500
 
 # # weighted round robin
 # PCAP_FILE = 'sched_data/weighted-round-robin/pkts.pcap'
 # RANK_FILE = 'sched_data/weighted-round-robin/ranks.json'
 # NUM_QUEUES = 4
+# INGRESS_LINK_RATE = 10 # Gbps
+# EGRESS_LINK_RATE = 4 # Gbps
+# NUM_PKTS = 1500
 
 START_DELAY = 100
 RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000
 IDLE_TIMEOUT = PERIOD*1000
-INGRESS_LINK_RATE = 10 # Gbps
-EGRESS_LINK_RATE = 2 # Gbps
 RATE_AVG_INTERVAL = 1000 # ns
 
 @cocotb.coroutine
@@ -68,8 +75,8 @@ def make_pkts_meta_in():
     with open(RANK_FILE) as f:
         ranks_in = json.load(f)
 
-    pkts_in = pkts_in
-    ranks_in = ranks_in
+    pkts_in = pkts_in[0:NUM_PKTS]
+    ranks_in = ranks_in[0:NUM_PKTS]
     assert(len(pkts_in) == len(ranks_in))
 
     meta_in = []
@@ -97,9 +104,13 @@ def plot_stats(input_pkts, output_pkts, egress_link_rate):
     # create plots
     fig, axarr = plt.subplots(2)
     plt.sca(axarr[0])
-    input_stats.plot_rates('Input Flow Rates', linewidth=3)
+#    input_stats.plot_rates('Input Flow Rates', linewidth=3)
+    input_stats.plot_rates('', linewidth=5)
+    plt.ylabel('Input Rate (Gb/s)')
     plt.sca(axarr[1])
-    output_stats.plot_rates('Output Flow Rates', ymax=egress_link_rate+egress_link_rate*0.5, linewidth=3)
+#    output_stats.plot_rates('Output Flow Rates', ymax=egress_link_rate+egress_link_rate*0.5, linewidth=3)
+    output_stats.plot_rates('', ymax=egress_link_rate+egress_link_rate*0.5, linewidth=5)
+    plt.ylabel('Output Rate (Gb/s)')
 
 @cocotb.test()
 def test_sched_alg(dut):
@@ -173,7 +184,7 @@ def test_sched_alg(dut):
 
     font = {'family' : 'normal',
             'weight' : 'bold',
-            'size'   : 22}
+            'size'   : 32}
     matplotlib.rc('font', **font)
     plt.show()
 

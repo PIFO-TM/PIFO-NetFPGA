@@ -29,7 +29,8 @@ PCAP_FILE = 'sched_data/stfq/pkts.pcap'
 START_DELAY = 100
 PERIOD = 5000
 IDLE_TIMEOUT = PERIOD*1000
-EGRESS_LINK_RATE = 10 # Gbps
+INGRESS_LINK_RATE = 10 # Gbps
+EGRESS_LINK_RATE = 2 # Gbps
 NUM_QUEUES = 4
 RATE_AVG_INTERVAL = 500 # ns
 
@@ -45,7 +46,7 @@ class STFQ_AXI4StreamMaster(AXI4StreamMaster):
         self.last_finish = {}
 
     @cocotb.coroutine
-    def stfq_write_pkts(self, pkts):
+    def stfq_write_pkts(self, pkts, rate=None):
         """
         Write a list of scapy pkts onto the AXI4Stream bus and perform the STFQ rank computation for each pkt
         """
@@ -90,6 +91,11 @@ class STFQ_AXI4StreamMaster(AXI4StreamMaster):
             yield self.write(pkt_words, keep=pkt_keeps, user=pkt_users)
             # wait a cycle
             yield RisingEdge(self.clock)
+
+            # wait some delay
+            delay = int(len(pkt)/float(rate) - len(pkt)/float(self.data_width)) if rate is not None else 1
+            for i in range(delay):
+                yield RisingEdge(self.clock)
 
 class STFQ_state(object):
     def __init__(self):
@@ -201,7 +207,8 @@ def test_stfq(dut):
     pkt_slave_thread = cocotb.fork(pkt_slave.read_n_pkts(len(pkts_in)))
 
     # Send pkts and metadata in the HW sim
-    yield pkt_master.stfq_write_pkts(pkts_in)
+    rate = 1.3*INGRESS_LINK_RATE*5/8.0 # bytes/cycle
+    yield pkt_master.stfq_write_pkts(pkts_in, rate=rate)
 
     # Wait for the pkt_slave and stats to finish (or timeout)
     yield pkt_slave_thread.join()
