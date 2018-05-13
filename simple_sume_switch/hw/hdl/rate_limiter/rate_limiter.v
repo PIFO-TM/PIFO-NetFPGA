@@ -126,6 +126,7 @@ module rate_limiter
    reg [L2_IFSM_STATES-1:0] ifsm_state, ifsm_state_next;
    reg [BP_COUNT_BITS-1:0] bp_config_r, bp_config_r_next; 
    reg [BP_COUNT_BITS-1:0] bp_count_r, bp_count_r_next;
+   reg                     pkt_done_r, pkt_done_r_next;
 
    reg [L2_RFSM_STATES-1:0] rfsm_state, rfsm_state_next;
  
@@ -167,7 +168,6 @@ module rate_limiter
          .clk         (axis_aclk)
          );
 
-
     /* Insertion State Machine */
     always @(*) begin
         //defaults
@@ -177,9 +177,11 @@ module rate_limiter
         m_fifo_wr_en = 0;
         bp_config_r_next = bp_config_r;
         bp_count_r_next = bp_count_r;
+        pkt_done_r_next = pkt_done_r;
 
         case(ifsm_state)
             WAIT_START: begin
+                pkt_done_r_next = 0;
                 s_axis_tready = 1;
                 if (s_axis_tvalid) begin
                     d_fifo_wr_en = 1;
@@ -198,7 +200,10 @@ module rate_limiter
                 s_axis_tready = 0;
                 if (bp_count_r >= bp_config_r) begin
                     bp_count_r_next = 1;
-                    ifsm_state_next = RCV_WORD;
+                    if (pkt_done_r)
+                        ifsm_state_next = WAIT_START;
+                    else
+                        ifsm_state_next = RCV_WORD;
                 end
                 else begin
                     bp_count_r_next = bp_count_r + 1;
@@ -210,7 +215,11 @@ module rate_limiter
                 if (s_axis_tvalid) begin
                     d_fifo_wr_en = 1;
                     if (s_axis_tlast) begin
-                        ifsm_state_next = WAIT_START;
+                        pkt_done_r_next = 1;
+                        if (bp_config_r == 0)
+                            ifsm_state_next = WAIT_START;
+                        else
+                            ifsm_state_next = ASSERT_BP;
                     end
                     else begin
                         if (bp_config_r == 0)
@@ -228,11 +237,13 @@ module rate_limiter
             ifsm_state <= WAIT_START;
             bp_config_r <= 0;
             bp_count_r <= 1;
+            pkt_done_r <= 0;
         end
         else begin
             ifsm_state <= ifsm_state_next;
             bp_config_r <= bp_config_r_next;
             bp_count_r <= bp_count_r_next;
+            pkt_done_r <= pkt_done_r_next;
         end
     end
 
