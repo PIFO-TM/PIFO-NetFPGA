@@ -298,7 +298,7 @@ module nf_datapath #(
       .m_axis_tlast (m_axis_opl_tlast), 
       .s_axis_tdata (s_axis_opl_tdata), 
       .s_axis_tkeep (s_axis_opl_tkeep), 
-      .s_axis_tuser ({dma_q_size, nf3_q_size, nf2_q_size, nf1_q_size, nf0_q_size, s_axis_opl_tuser[C_M_AXIS_TUSER_WIDTH-DIGEST_WIDTH-1:0]}), 
+      .s_axis_tuser (s_axis_opl_tuser), 
       .s_axis_tvalid(s_axis_opl_tvalid), 
       .s_axis_tready(s_axis_opl_tready), 
       .s_axis_tlast (s_axis_opl_tlast),

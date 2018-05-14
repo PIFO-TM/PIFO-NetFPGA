@@ -171,12 +171,13 @@ read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/rank_pipe/strict_rank.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/rank_pipe/rr_rank.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/rank_pipe/wrr_rank.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/rank_pipe/rank_pipe.v"
-read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/simple_tm/simple_rank_tm.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/simple_rank_tm/simple_rank_tm.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/rate_limiter/rate_limiter.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/trim_ts/trim_ts.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/demo_datapath/demo_datapath.v"
 read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/nf_datapath.v"
-read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/top.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/top_sim.v"
+read_verilog "$::env(NF_DESIGN_DIR)/hw/hdl/top_tb.v"
 
 update_compile_order -fileset sources_1
 update_compile_order -fileset sim_1
@@ -341,13 +342,10 @@ add_wave $nf_sume_sdnet_ip/out_pkt_len
 add_wave $nf_sume_sdnet_ip/out_src_port
 add_wave $nf_sume_sdnet_ip/out_dst_port
 
-add_wave_divider {Pkt Storage}
-add_wave $nf_datapath/tm_inst/pkt_storage
+add_wave_divider {Demo Datapath}
+add_wave $nf_datapath/demo_datapath_inst/
 
 add_wave_divider {nf_sume_sdnet_ip}
 add_wave $nf_sume_sdnet_ip
-
-add_wave_divider {tm_top}
-add_wave $nf_datapath/tm_inst
 
 run 65us

@@ -59,13 +59,17 @@ nf_id_map = {"nf0":0, "nf1":1, "nf2":2, "nf3":3}
 
 sss_sdnet_tuples.clear_tuple_files()
 
-def applyPkt(pkt, ingress, time):
+pktTime = 0
+
+def applyPkt(pkt, ingress):
+    global pktTime
     pktsApplied.append(pkt)
     sss_sdnet_tuples.sume_tuple_in['pkt_len'] = len(pkt) 
     sss_sdnet_tuples.sume_tuple_in['src_port'] = nf_port_map[ingress]
     sss_sdnet_tuples.sume_tuple_expect['pkt_len'] = len(pkt) 
     sss_sdnet_tuples.sume_tuple_expect['src_port'] = nf_port_map[ingress]
-    pkt.time = time
+    pkt.time = pktTime
+    pktTime += 1
     nf_applied[nf_id_map[ingress]].append(pkt)
 
 def expPkt(pkt, egress):
@@ -99,9 +103,32 @@ def write_pcap_files():
 # generate testdata #
 #####################
 
-pkt = pad_pkt(Ether(dst='08:11:11:11:11:08', src='08:22:22:22:22:08'), 64)
-applyPkt(pkt, 'nf1', 0)
-expPkt(pkt, 'nf0')
+sport = 1
+pkt = Ether(dst='08:11:11:11:11:08', src='08:22:22:22:22:08') / IP(src='10.0.0.2', dst='10.0.0.1') / TCP(sport=sport)
+pkt = pad_pkt(pkt, 1500)
+
+for i in range(4):
+    sport = 1
+    pkt1 = pkt.copy()
+    pkt1.sport = sport
+    applyPkt(pkt1, 'nf0')
+    sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
+    sss_sdnet_tuples.sume_tuple_expect['flow_id'] = sport
+    sss_sdnet_tuples.sume_tuple_expect['q_id'] = sport
+    sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
+    sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
+    expPkt(pkt1, 'nf1')
+    
+    sport = 2
+    pkt2 = pkt.copy()
+    pkt2.sport = sport
+    applyPkt(pkt2, 'nf0')
+    sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
+    sss_sdnet_tuples.sume_tuple_expect['flow_id'] = sport
+    sss_sdnet_tuples.sume_tuple_expect['q_id'] = sport
+    sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
+    sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
+    expPkt(pkt2, 'nf1')
 
 write_pcap_files()
 

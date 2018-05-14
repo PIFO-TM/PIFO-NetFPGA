@@ -38,7 +38,7 @@ SDNet simulations
 import argparse, collections, sys
 
 # this defines the common sume_metadata
-from sss_sume_metadata import *
+from sume_metadata import *
 
 tuple_in_file = "Tuple_in.txt"
 tuple_expect_file = "Tuple_expect.txt"
