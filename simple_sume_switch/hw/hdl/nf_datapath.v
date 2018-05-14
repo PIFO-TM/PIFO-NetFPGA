@@ -328,23 +328,40 @@ module nf_datapath #(
     wire [C_S_AXI_DATA_WIDTH-1:0] bytes_dropped;
     wire [5-1:0] pkt_dropped; 
 
-   simple_tm_sl_drop
+   demo_datapath
    #(
        .C_M_AXIS_DATA_WIDTH(C_M_AXIS_DATA_WIDTH),
        .C_S_AXIS_DATA_WIDTH(C_S_AXIS_DATA_WIDTH),
        .C_M_AXIS_TUSER_WIDTH(C_M_AXIS_TUSER_WIDTH),
        .C_S_AXIS_TUSER_WIDTH(C_S_AXIS_TUSER_WIDTH),
-       .PIFO_DEPTH  (1024),
-       .PIFO_REG_DEPTH (32),
-       .STORAGE_MAX_PKTS (1024),
-       .NUM_SKIP_LISTS (1),
-       .NUM_QUEUES (1)
+       .PIFO_DEPTH  (4096),
+       .PIFO_REG_DEPTH (16),
+       .STORAGE_MAX_PKTS (2048),
+       .NUM_SKIP_LISTS (11),
+       .NUM_QUEUES (4)
    )
-   tm_inst
+   demo_datapath_inst
    (
        // Global Ports
        .axis_aclk (axis_aclk),
        .axis_resetn (axis_resetn),
+
+       // Input Pkt Logs
+       .nf3_m_axis_tdata   (m_axis_3_tdata),
+       .nf3_m_axis_tkeep   (m_axis_3_tkeep),
+       .nf3_m_axis_tuser   (m_axis_3_tuser),
+       .nf3_m_axis_tvalid  (m_axis_3_tvalid),
+       .nf3_m_axis_tready  (m_axis_3_tready),
+       .nf3_m_axis_tlast   (m_axis_3_tlast),
+
+       // Output Pkt Logs
+       .nf2_m_axis_tdata   (m_axis_2_tdata),
+       .nf2_m_axis_tkeep   (m_axis_2_tkeep),
+       .nf2_m_axis_tuser   (m_axis_2_tuser),
+       .nf2_m_axis_tvalid  (m_axis_2_tvalid),
+       .nf2_m_axis_tready  (m_axis_2_tready),
+       .nf2_m_axis_tlast   (m_axis_2_tlast),
+
        // output pkts
        .m_axis_tdata  (m_axis_tm_tdata),
        .m_axis_tkeep  (m_axis_tm_tkeep),
@@ -385,24 +402,24 @@ module nf_datapath #(
       .m_axis_1_tvalid(m_axis_1_tvalid), 
       .m_axis_1_tready(m_axis_1_tready), 
       .m_axis_1_tlast (m_axis_1_tlast), 
-      .m_axis_2_tdata (m_axis_2_tdata), 
-      .m_axis_2_tkeep (m_axis_2_tkeep), 
-      .m_axis_2_tuser (m_axis_2_tuser), 
-      .m_axis_2_tvalid(m_axis_2_tvalid), 
-      .m_axis_2_tready(m_axis_2_tready), 
-      .m_axis_2_tlast (m_axis_2_tlast), 
-      .m_axis_3_tdata (m_axis_3_tdata), 
-      .m_axis_3_tkeep (m_axis_3_tkeep), 
-      .m_axis_3_tuser (m_axis_3_tuser), 
-      .m_axis_3_tvalid(m_axis_3_tvalid), 
-      .m_axis_3_tready(m_axis_3_tready), 
-      .m_axis_3_tlast (m_axis_3_tlast), 
-      .m_axis_4_tdata (m_axis_4_tdata), 
-      .m_axis_4_tkeep (m_axis_4_tkeep), 
-      .m_axis_4_tuser (m_axis_4_tuser), 
-      .m_axis_4_tvalid(m_axis_4_tvalid), 
-      .m_axis_4_tready(m_axis_4_tready), 
-      .m_axis_4_tlast (m_axis_4_tlast), 
+      .m_axis_2_tdata (), 
+      .m_axis_2_tkeep (), 
+      .m_axis_2_tuser (), 
+      .m_axis_2_tvalid(), 
+      .m_axis_2_tready(), 
+      .m_axis_2_tlast (), 
+      .m_axis_3_tdata (), 
+      .m_axis_3_tkeep (), 
+      .m_axis_3_tuser (), 
+      .m_axis_3_tvalid(), 
+      .m_axis_3_tready(), 
+      .m_axis_3_tlast (), 
+      .m_axis_4_tdata (), 
+      .m_axis_4_tkeep (), 
+      .m_axis_4_tuser (), 
+      .m_axis_4_tvalid(), 
+      .m_axis_4_tready(), 
+      .m_axis_4_tlast (), 
 
       .nf0_q_size(nf0_q_size),
       .nf1_q_size(nf1_q_size),
