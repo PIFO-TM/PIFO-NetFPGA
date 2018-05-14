@@ -21,15 +21,21 @@ VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/det_skip_list/det_skip_list.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_top/pifo_top.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/axi_stream_fifo/axi_stream_fifo.v
 
-# ===================================== #
-
-TOPLEVEL = demo_datapath
+# rank pipe files
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/rank_pipe/strict_rank.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/rank_pipe/rr_rank.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/rank_pipe/wrr_rank.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/rank_pipe/rank_pipe.v
 
 # top level source files -- packets are dropped
-VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_tm/simple_tm_sl_drop.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_rank_tm/simple_rank_tm.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/rate_limiter/rate_limiter.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/trim_ts/trim_ts.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/demo_datapath/demo_datapath.v
+
+# ===================================== #
+
+TOPLEVEL = demo_datapath
 
 ### Module for testing scheduling algorithms ####
 MODULE=test_sched_alg_demo

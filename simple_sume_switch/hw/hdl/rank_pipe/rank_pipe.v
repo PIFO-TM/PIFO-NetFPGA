@@ -1,10 +1,36 @@
+//-
+// Copyright (C) 2010, 2011 The Board of Trustees of The Leland Stanford
+//                          Junior University
+// Copyright (C) 2018 Stephen Ibanez
+// All rights reserved.
+//
+// This software was developed by
+// Stanford University and the University of Cambridge Computer Laboratory
+// under National Science Foundation under Grant No. CNS-0855268,
+// the University of Cambridge Computer Laboratory under EPSRC INTERNET Project EP/H040536/1 and
+// by the University of Cambridge Computer Laboratory under DARPA/AFRL contract FA8750-11-C-0249 ("MRC2"),
+// as part of the DARPA MRC research programme.
+//
+// @NETFPGA_LICENSE_HEADER_START@
+//
+// Licensed to NetFPGA C.I.C. (NetFPGA) under one or more contributor
+// license agreements.  See the NOTICE file distributed with this work for
+// additional information regarding copyright ownership.  NetFPGA licenses this
+// file to you under the NetFPGA Hardware-Software License, Version 1.0 (the
+// "License"); you may not use this file except in compliance with the
+// License.  You may obtain a copy of the License at:
+//
+//   http://www.netfpga-cic.org
+//
+// Unless required by applicable law or agreed to in writing, Work distributed
+// under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+// CONDITIONS OF ANY KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations under the License.
+//
+// @NETFPGA_LICENSE_HEADER_END@
+//
+
 `timescale 1ns/1ps
-
-`define STRICT_OP 0
-`define RR_OP     1
-`define WRR_OP    2
-
-`define NUM_RANK_OPS 3
 
 module rank_pipe
 #(
@@ -13,14 +39,19 @@ module rank_pipe
     parameter MAX_NUM_FLOWS = 4,
     parameter RANK_CODE_BITS = 2,
     parameter RANK_WIDTH = 16,
-    parameter META_WIDTH = 16
+    parameter META_WIDTH = 16,
+
+    parameter STRICT_OP = 0,
+    parameter RR_OP     = 1,
+    parameter WRR_OP    = 2,
+    parameter NUM_RANK_OPS = 3
 )
 (
     input                              rst,
     input                              clk,
 
     // Input Interface -- Can only insert on cycles where busy == 0
-    output                             busy,
+    output reg                         busy,
     input                              insert,
     input      [META_WIDTH-1:0]        meta_in,
     input      [RANK_CODE_BITS-1:0]    rank_op_in,
@@ -51,11 +82,11 @@ module rank_pipe
     wire                         i_fifo_nearly_full;
     wire                         i_fifo_empty;
 
-    reg  [INPUT_FIFO_WIDTH-1:0]  o_fifo_data_in;
-    reg                          o_fifo_wr_en;
-    reg                          o_fifo_rd_en;
-    wire                         o_fifo_nearly_full;
-    wire                         o_fifo_empty;
+    reg  [OUTPUT_FIFO_WIDTH-1:0]  o_fifo_data_in;
+    reg                           o_fifo_wr_en;
+    reg                           o_fifo_rd_en;
+    wire                          o_fifo_nearly_full;
+    wire                          o_fifo_empty;
 
     // ranks pipe signals
     wire [NUM_RANK_OPS-1:0]      pipe_busy;
@@ -175,7 +206,7 @@ module rank_pipe
     integer i;
     always @(*) begin
         // Logic to insert into FIFO
-        busy = ~i_fifo_nearly_full;
+        busy = i_fifo_nearly_full;
         i_fifo_wr_en = 0;
         i_fifo_data_in = 0;
         if (insert && (rank_op_in < NUM_RANK_OPS)) begin

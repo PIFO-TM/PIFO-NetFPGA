@@ -55,7 +55,6 @@ module pifo_pkt_storage
     parameter C_S_AXIS_TUSER_WIDTH = 128,
     parameter SRC_PORT_POS         = 16,
     parameter DST_PORT_POS         = 24,
-    parameter RANK_POS             = 32,
 
     // Ptr AXI Stream Data Width
     parameter C_M_AXIS_PTR_DATA_WIDTH  = 24,

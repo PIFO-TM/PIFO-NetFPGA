@@ -26,28 +26,28 @@ from demo_utils.queue_stats import QueueStats
 # # strict priority
 # PCAP_FILE = 'sched_data/strict/big_test/pkts.pcap'
 # RANK_FILE = 'sched_data/strict/big_test/ranks.json'
-# NUM_QUEUES = 2
 # INGRESS_LINK_RATE = 10 # Gbps
 # EGRESS_LINK_RATE = 4 # Gbps
-# NUM_PKTS = 3000
+# NUM_PKTS = 1500
+# RANK_OP = 0
 
 # round robin
 PCAP_FILE = 'sched_data/round-robin/pkts.pcap'
 RANK_FILE = 'sched_data/round-robin/ranks.json'
-NUM_QUEUES = 4
 INGRESS_LINK_RATE = 10 # Gbps
 EGRESS_LINK_RATE = 4 # Gbps
 NUM_PKTS = 1500
-#NUM_PKTS = 75
+RANK_OP = 1
 
 # # weighted round robin
 # PCAP_FILE = 'sched_data/weighted-round-robin/pkts.pcap'
 # RANK_FILE = 'sched_data/weighted-round-robin/ranks.json'
-# NUM_QUEUES = 4
 # INGRESS_LINK_RATE = 10 # Gbps
 # EGRESS_LINK_RATE = 4 # Gbps
 # NUM_PKTS = 1500
+# RANK_OP = 2
 
+FLOW_WEIGHTS = {0:2, 1:1, 2:1, 3:1}
 START_DELAY = 100
 RESULTS_FILE = 'cocotb_results.json'
 PERIOD = 5000
@@ -55,7 +55,7 @@ IDLE_TIMEOUT = PERIOD*1000
 RATE_AVG_INTERVAL = 1000 # ns
 #RATE_AVG_INTERVAL = 20000 # ns
 
-BP_COUNT = 256/(EGRESS_LINK_RATE*5) + 4
+BP_COUNT = 256/(EGRESS_LINK_RATE*5) + 1
 
 @cocotb.coroutine
 def reset_dut(dut):
@@ -76,24 +76,23 @@ def reset_dut(dut):
 def make_pkts_meta_in():
     # read the pkts and rank values
     pkts_in = rdpcap(PCAP_FILE)
-    with open(RANK_FILE) as f:
-        ranks_in = json.load(f)
+#    with open(RANK_FILE) as f:
+#        ranks_in = json.load(f)
 
-#    pkts_in = [Ether(dst=p[Ether].dst, src=p[Ether].src)/IP(src=p[IP].src, dst=p[IP].dst)/TCP(sport=p.sport, dport=p.dport)/('\x00'*(1500 - 54)) for p in pkts_in[0:NUM_PKTS]]
     pkts_in =  pkts_in[0:NUM_PKTS]
-    ranks_in = ranks_in[0:NUM_PKTS]
-    assert(len(pkts_in) == len(ranks_in))
+#    ranks_in = ranks_in[0:NUM_PKTS]
+#    assert(len(pkts_in) == len(ranks_in))
 
     meta_in = []
-    for pkt, rank in zip(pkts_in, ranks_in):
+    for pkt in pkts_in:
         flowID = pkt.sport
-        meta = Metadata(pkt_len=len(pkt), src_port=0b00000001, dst_port=0b00000100, rank=rank, bp_count=BP_COUNT, q_id=flowID)
+        meta = Metadata(pkt_len=len(pkt), src_port=0b00000001, dst_port=0b00000100, bp_count=BP_COUNT, q_id=flowID, rank_op=RANK_OP, flow_id=flowID, flow_weight=FLOW_WEIGHTS[flowID])
         tuser = BinaryValue(bits=len(meta)*8, bigEndian=False)
         tuser.set_buff(str(meta))
         meta_in.append(tuser)
 
     print 'len(pkts_in) = {}'.format(len(pkts_in))
-    return pkts_in, meta_in, ranks_in
+    return pkts_in, meta_in
 
 def plot_stats(input_log_pkts, output_log_pkts, egress_link_rate):
     print "Calculating Input Rates ..."
@@ -128,7 +127,7 @@ def test_sched_alg_demo(dut):
     yield ClockCycles(dut.axis_aclk, START_DELAY)
 
     # read the pkts and rank values
-    pkts_in, meta_in, ranks_in = make_pkts_meta_in()
+    pkts_in, meta_in = make_pkts_meta_in()
 
     # Attach an AXI4Stream Master to the input pkt interface
     pkt_master = AXI4StreamMaster(dut, 's_axis', dut.axis_aclk)
@@ -152,7 +151,7 @@ def test_sched_alg_demo(dut):
 
     pkts_out = pkt_slave.pkts
     meta_out = pkt_slave.metadata
-    ranks_out = [Metadata(m.get_buff()).rank for m in meta_out]
+#    ranks_out = [Metadata(m.get_buff()).rank for m in meta_out]
 
     yield ClockCycles(dut.axis_aclk, 20)
 

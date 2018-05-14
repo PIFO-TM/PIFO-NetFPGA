@@ -9,7 +9,7 @@ module strict_rank
 (
     input                          rst,
     input                          clk,
-    output                         busy,
+    output reg                     busy,
     input                          insert,
     input      [META_WIDTH-1:0]    meta_in,
     input      [FLOW_ID_WIDTH-1:0] flowID_in,
@@ -53,7 +53,7 @@ module strict_rank
 
     // Insertion Logic
     always @(*) begin
-        busy = ~fifo_nearly_full;
+        busy = fifo_nearly_full;
         if (insert) begin
             fifo_wr_en = 1;
         end

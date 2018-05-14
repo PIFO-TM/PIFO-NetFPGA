@@ -56,8 +56,8 @@ module rate_limiter
     parameter C_S_AXIS_TUSER_WIDTH = 128,
     parameter SRC_PORT_POS         = 16,
     parameter DST_PORT_POS         = 24,
-    parameter RANK_POS             = 32,
-    parameter BP_COUNT_POS         = 48
+    parameter BP_COUNT_POS         = 32,
+    parameter BP_COUNT_WIDTH       = 16
 )
 (
     // Global Ports
@@ -102,9 +102,7 @@ module rate_limiter
    /* For Removal FSM */
    localparam RFSM_START = 0;
    localparam RFSM_FINISH_PKT = 1;
-   localparam L2_RFSM_STATES = 1;   
-
-   localparam BP_COUNT_BITS = 16;
+   localparam L2_RFSM_STATES = 1;
 
    localparam MAX_DEPTH = 64; // measured in 32B words
    localparam L2_MAX_DEPTH = log2(MAX_DEPTH);
@@ -124,8 +122,8 @@ module rate_limiter
    wire m_fifo_empty;
 
    reg [L2_IFSM_STATES-1:0] ifsm_state, ifsm_state_next;
-   reg [BP_COUNT_BITS-1:0] bp_config_r, bp_config_r_next; 
-   reg [BP_COUNT_BITS-1:0] bp_count_r, bp_count_r_next;
+   reg [BP_COUNT_WIDTH-1:0] bp_config_r, bp_config_r_next; 
+   reg [BP_COUNT_WIDTH-1:0] bp_count_r, bp_count_r_next;
    reg                     pkt_done_r, pkt_done_r_next;
 
    reg [L2_RFSM_STATES-1:0] rfsm_state, rfsm_state_next;
@@ -186,7 +184,7 @@ module rate_limiter
                 if (s_axis_tvalid) begin
                     d_fifo_wr_en = 1;
                     m_fifo_wr_en = 1;
-                    bp_config_r_next = s_axis_tuser[BP_COUNT_POS+BP_COUNT_BITS-1 : BP_COUNT_POS];
+                    bp_config_r_next = s_axis_tuser[BP_COUNT_POS+BP_COUNT_WIDTH-1 : BP_COUNT_POS];
                     if (bp_config_r_next == 0) begin
                         ifsm_state_next = RCV_WORD;
                     end

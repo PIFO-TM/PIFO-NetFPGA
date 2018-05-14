@@ -53,6 +53,18 @@ module demo_datapath
     parameter C_S_AXIS_DATA_WIDTH  = 256,
     parameter C_M_AXIS_TUSER_WIDTH = 128,
     parameter C_S_AXIS_TUSER_WIDTH = 128,
+    parameter BP_COUNT_POS         = 32,
+    parameter BP_COUNT_WIDTH       = 16,
+    parameter Q_ID_POS             = BP_COUNT_POS+BP_COUNT_WIDTH,
+    parameter Q_ID_WIDTH           = 8,
+    parameter RANK_OP_POS          = Q_ID_POS+Q_ID_WIDTH,
+    parameter RANK_OP_WIDTH        = 8,
+    parameter FLOW_ID_POS          = RANK_OP_POS+RANK_OP_WIDTH,
+    parameter FLOW_ID_WIDTH        = 16,
+    parameter FLOW_WEIGHT_POS      = FLOW_ID_POS+FLOW_ID_WIDTH,
+    parameter FLOW_WEIGHT_WIDTH    = 8,
+
+    parameter MAX_NUM_FLOWS        = 4,
 
     // max num pkts the pifo can store
     parameter PIFO_DEPTH = 4096,
@@ -118,8 +130,20 @@ module demo_datapath
 
    // ------------- Modules ---------------
 
-   simple_tm_sl_drop
+   simple_rank_tm
    #(
+       .BP_COUNT_POS      (BP_COUNT_POS), 
+       .BP_COUNT_WIDTH    (BP_COUNT_WIDTH), 
+       .Q_ID_POS          (Q_ID_POS), 
+       .Q_ID_WIDTH        (Q_ID_WIDTH), 
+       .RANK_OP_POS       (RANK_OP_POS), 
+       .RANK_OP_WIDTH     (RANK_OP_WIDTH), 
+       .FLOW_ID_POS       (FLOW_ID_POS), 
+       .FLOW_ID_WIDTH     (FLOW_ID_WIDTH), 
+       .FLOW_WEIGHT_POS   (FLOW_WEIGHT_POS), 
+       .FLOW_WEIGHT_WIDTH (FLOW_WEIGHT_WIDTH),
+
+       .MAX_NUM_FLOWS     (MAX_NUM_FLOWS),
        .PIFO_DEPTH       (PIFO_DEPTH),
        .PIFO_REG_DEPTH   (PIFO_REG_DEPTH),
        .STORAGE_MAX_PKTS (STORAGE_MAX_PKTS),
@@ -153,7 +177,12 @@ module demo_datapath
        .qsize_3       (qsize_3)
    );
 
-   rate_limiter rate_limiter_inst
+   rate_limiter
+   #(
+       .BP_COUNT_POS   (BP_COUNT_POS),
+       .BP_COUNT_WIDTH (BP_COUNT_WIDTH)
+   )
+   rate_limiter_inst
    (
        // Global Ports
        .axis_aclk (axis_aclk),

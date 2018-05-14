@@ -11,7 +11,7 @@ module wrr_rank
 (
     input                              rst,
     input                              clk,
-    output                             busy,
+    output reg                         busy,
     input                              insert,
     input      [META_WIDTH-1:0]        meta_in,
     input      [FLOW_ID_WIDTH-1:0]     flowID_in,
@@ -66,7 +66,7 @@ module wrr_rank
     integer i;
     always @(*) begin
         // defaults
-        busy = ~fifo_nearly_full;
+        busy = fifo_nearly_full;
         fifo_wr_en = 0;
         fifo_rank_in = 0;
 
@@ -87,7 +87,7 @@ module wrr_rank
             end
             else begin
                 // have seen this flow before
-                if (flow_cnt_r[flowID_in] == flow_weight_in_r) begin
+                if (flow_cnt_r[flowID_in] == flow_weight_in) begin
                     fifo_rank_in = flow_last_rank_r[flowID_in] + num_active_flows_r;
                     flow_cnt_r_next[flowID_in] = 1;
                 end
@@ -96,17 +96,16 @@ module wrr_rank
                     flow_cnt_r_next[flowID_in] = flow_cnt_r[flowID_in] + 1;
                 end
             end
+            // update state
+            if (fifo_rank_in > max_rank_r) begin
+                max_rank_r_next = fifo_rank_in;
+            end
+            flow_last_rank_r_next[flowID_in] = fifo_rank_in;
         end
         else begin
-            if (flowID_in < MAX_NUM_FLOWS)
-                $display("ERROR: rr_rank: flowID_in >= MAX_NUM_FLOWS, flowID_in = %d\n" % flowID_in);
+            if (flowID_in >= MAX_NUM_FLOWS)
+                $display("ERROR: wrr_rank: flowID_in >= MAX_NUM_FLOWS, flowID_in = %d\n" % flowID_in);
         end
-
-        // update state
-        if (fifo_rank_in > max_rank_r) begin
-            max_rank_r_next = fifo_rank_in;
-        end
-        flow_last_rank_r_next[flowID_in] = fifo_rank_in;
     end
 
     // State Update

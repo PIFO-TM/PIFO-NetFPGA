@@ -10,7 +10,7 @@ module rr_rank
 (
     input                          rst,
     input                          clk,
-    output                         busy,
+    output reg                     busy,
     input                          insert,
     input      [META_WIDTH-1:0]    meta_in,
     input      [FLOW_ID_WIDTH-1:0] flowID_in,
@@ -61,11 +61,12 @@ module rr_rank
     integer i;
     always @(*) begin
         // defaults
-        busy = ~fifo_nearly_full;
+        busy = fifo_nearly_full;
 
         fifo_wr_en = 0;
         fifo_rank_in = 0;
 
+        max_rank_r_next = max_rank_r;
         num_active_flows_r_next = num_active_flows_r;
         for (i=0; i < MAX_NUM_FLOWS; i=i+1) begin
             flow_last_rank_r_next[i] = flow_last_rank_r[i];
@@ -82,15 +83,14 @@ module rr_rank
                 // have seen this flow before
                 fifo_rank_in = flow_last_rank_r[flowID_in] + num_active_flows_r;
             end
+            // update state
+            max_rank_r_next = fifo_rank_in;
+            flow_last_rank_r_next[flowID_in] = fifo_rank_in;
         end
         else begin
-            if (flowID_in < MAX_NUM_FLOWS)
+            if (flowID_in >= MAX_NUM_FLOWS)
                 $display("ERROR: rr_rank: flowID_in >= MAX_NUM_FLOWS, flowID_in = %d\n" % flowID_in);
         end
-
-        // update state
-        max_rank_r_next = fifo_rank_in;
-        flow_last_rank_r_next[flowID_in] = fifo_rank_in;
     end
 
     // State Update
