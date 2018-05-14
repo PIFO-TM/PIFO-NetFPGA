@@ -30,3 +30,5 @@
 table_cam_add_entry forward set_output_port 0b00000100 => 0b00000001
 table_cam_add_entry forward set_output_port 0b00000001 => 0b00000100
 
+table_cam_add_entry check_reset mark_reset 0xffffffffffff =>
+

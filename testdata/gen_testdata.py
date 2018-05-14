@@ -117,6 +117,7 @@ for i in range(4):
     sss_sdnet_tuples.sume_tuple_expect['q_id'] = sport
     sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
     sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
+    sss_sdnet_tuples.sume_tuple_expect['rank_rst'] = 0
     expPkt(pkt1, 'nf1')
     
     sport = 2
@@ -128,7 +129,19 @@ for i in range(4):
     sss_sdnet_tuples.sume_tuple_expect['q_id'] = sport
     sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
     sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
+    sss_sdnet_tuples.sume_tuple_expect['rank_rst'] = 0
     expPkt(pkt2, 'nf1')
+
+pkt3 = pkt.copy()
+pkt3[Ether].src = 'ff:ff:ff:ff:ff:ff'
+applyPkt(pkt3, 'nf0')
+sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
+sss_sdnet_tuples.sume_tuple_expect['flow_id'] = 1
+sss_sdnet_tuples.sume_tuple_expect['q_id'] = 1
+sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
+sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
+sss_sdnet_tuples.sume_tuple_expect['rank_rst'] = 1
+expPkt(pkt3, 'nf1')
 
 write_pcap_files()
 

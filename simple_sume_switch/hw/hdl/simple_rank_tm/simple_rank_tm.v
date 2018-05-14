@@ -66,6 +66,8 @@ module simple_rank_tm
     parameter FLOW_ID_WIDTH        = 16, 
     parameter FLOW_WEIGHT_POS      = FLOW_ID_POS+FLOW_ID_WIDTH, 
     parameter FLOW_WEIGHT_WIDTH    = 8,
+    parameter RANK_RST_POS         = FLOW_WEIGHT_POS+FLOW_WEIGHT_WIDTH, 
+    parameter RANK_RST_WIDTH       = 8,
 
     parameter MAX_NUM_FLOWS        = 4, 
 
@@ -176,6 +178,7 @@ module simple_rank_tm
    wire                        pipe_valid_out;
    wire [RANK_WIDTH-1:0]       pipe_rank_out;
    wire [PTRS_WIDTH-1:0]       pipe_meta_out;
+   reg                         pipe_rst;
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
    reg pkt_in_accepted;
@@ -184,6 +187,7 @@ module simple_rank_tm
    reg  [RANK_OP_WIDTH-1:0] pipe_rank_op_in_r, pipe_rank_op_in_r_next;
    reg  [FLOW_ID_WIDTH-1:0] pipe_flowID_in_r, pipe_flowID_in_r_next;
    reg  [FLOW_WEIGHT_WIDTH-1:0] pipe_flow_weight_in_r, pipe_flow_weight_in_r_next;
+   reg  pipe_rst_r, pipe_rst_r_next;
 
    reg  [L2_PIPE_STATES-1:0]    ifsm_pipe_state, ifsm_pipe_state_next;
    reg                          ifsm_pipe_ready;
@@ -315,7 +319,7 @@ module simple_rank_tm
    )
    rank_pipe_inst
    (
-       .rst (~axis_resetn),
+       .rst (~axis_resetn | pipe_rst),
        .clk (axis_aclk),
    
        // Input Interface -- Can only insert on cycles where busy == 0
@@ -347,6 +351,7 @@ module simple_rank_tm
       pipe_rank_op_in_r_next     = pipe_rank_op_in_r; 
       pipe_flowID_in_r_next      = pipe_flowID_in_r;
       pipe_flow_weight_in_r_next = pipe_flow_weight_in_r;
+      pipe_rst_r_next            = pipe_rst_r;
 
       s_axis_fifo_tready = 1;
 
@@ -363,6 +368,7 @@ module simple_rank_tm
                       pipe_rank_op_in_r_next     = s_axis_fifo_tuser[RANK_OP_POS+RANK_OP_WIDTH-1 : RANK_OP_POS];
                       pipe_flowID_in_r_next      = s_axis_fifo_tuser[FLOW_ID_POS+FLOW_ID_WIDTH-1 : FLOW_ID_POS];
                       pipe_flow_weight_in_r_next = s_axis_fifo_tuser[FLOW_WEIGHT_POS+FLOW_WEIGHT_WIDTH-1 : FLOW_WEIGHT_POS];
+                      pipe_rst_r_next            = s_axis_fifo_tuser[RANK_RST_POS];
                       // TODO: static simulation check that storage_ptr_out_tvalid == 1
                       // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
@@ -415,6 +421,7 @@ module simple_rank_tm
       pipe_rank_op_in = 0;
       pipe_flowID_in = 0;
       pipe_flow_weight_in = 0;
+      pipe_rst = 0;
 
       case(ifsm_pipe_state)
           PIPE_START: begin
@@ -431,6 +438,7 @@ module simple_rank_tm
                   pipe_rank_op_in = pipe_rank_op_in_r;
                   pipe_flowID_in = pipe_flowID_in_r;
                   pipe_flow_weight_in = pipe_flow_weight_in_r;
+                  pipe_rst = pipe_rst_r;
                   ifsm_pipe_state_next = PIPE_START;
               end
           end
@@ -444,6 +452,7 @@ module simple_rank_tm
          pipe_rank_op_in_r <= 0;
          pipe_flowID_in_r <= 0;
          pipe_flow_weight_in_r <= 0;
+         pipe_rst_r <= 0;
          ifsm_pipe_state <= PIPE_START;
       end
       else begin
@@ -452,6 +461,7 @@ module simple_rank_tm
          pipe_rank_op_in_r <= pipe_rank_op_in_r_next;
          pipe_flowID_in_r <= pipe_flowID_in_r_next;
          pipe_flow_weight_in_r <= pipe_flow_weight_in_r_next;
+         pipe_rst_r <= pipe_rst_r_next;
          ifsm_pipe_state <= ifsm_pipe_state_next;
       end
    end

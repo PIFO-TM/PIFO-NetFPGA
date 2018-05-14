@@ -189,6 +189,21 @@ control TopPipe(inout Parsed_packet p,
         default_action = NoAction;
     }
 
+    action mark_reset() {
+        sume_metadata.rank_rst = 1;
+    }
+
+    table check_reset {
+        key = { p.ethernet.srcAddr: exact; }
+
+        actions = {
+            mark_reset;
+            NoAction;
+        }
+        size = 64;
+        default_action = NoAction;
+    }
+
 
     apply {
         forward.apply();
@@ -211,6 +226,9 @@ control TopPipe(inout Parsed_packet p,
 
             // set flow_weight field
             flow_weight_reg_rw(flow_id[L2_MAX_NUM_FLOWS-1:0], 0, REG_READ, sume_metadata.flow_weight);
+
+            // reset rank computation state if needed
+            check_reset.apply();
         } else {
             sume_metadata.bp_count = 0;
             sume_metadata.flow_id = 0;

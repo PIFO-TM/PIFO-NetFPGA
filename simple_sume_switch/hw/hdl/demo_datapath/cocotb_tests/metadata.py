@@ -15,10 +15,11 @@ class Metadata(Packet):
         BitField("rank_op", 0, 8),
         LEShortField("flow_id", 0),
         BitField("flow_weight", 0, 8),
-        BitField("unused", 0, 40)
+        BitField("rank_rst", 0, 8),
+        BitField("unused", 0, 32)
     ]
     def mysummary(self):
-        return self.sprintf("pkt_len=%pkt_len% src_port=%src_port% dst_port=%dst_port% bp_count=%bp_count% q_id=%q_id% rank_op=%rank_op% flow_id=%flow_id% flow_weight=%flow_weight%")
+        return self.sprintf("pkt_len=%pkt_len% src_port=%src_port% dst_port=%dst_port% bp_count=%bp_count% q_id=%q_id% rank_op=%rank_op% flow_id=%flow_id% flow_weight=%flow_weight% rank_rst=%rank_rst%")
 
 bind_layers(Metadata, Raw)
 

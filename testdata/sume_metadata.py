@@ -37,7 +37,8 @@ Define the sume_metadata bus for SDNet simulations
 import collections
 
 sume_field_len = collections.OrderedDict()
-sume_field_len['unused'] = 40
+sume_field_len['unused'] = 32
+sume_field_len['rank_rst'] = 8
 sume_field_len['flow_weight'] = 8
 sume_field_len['flow_id'] = 16
 sume_field_len['rank_op'] = 8
@@ -50,6 +51,7 @@ sume_field_len['pkt_len'] = 16
 # initialize tuple_in
 sume_tuple_in = collections.OrderedDict()
 sume_tuple_in['unused'] = 0
+sume_tuple_in['rank_rst'] = 0
 sume_tuple_in['flow_weight'] = 0
 sume_tuple_in['flow_id'] = 0
 sume_tuple_in['rank_op'] = 0
@@ -62,6 +64,7 @@ sume_tuple_in['pkt_len'] = 0
 #initialize tuple_expect
 sume_tuple_expect = collections.OrderedDict()
 sume_tuple_expect['unused'] = 0
+sume_tuple_expect['rank_rst'] = 0
 sume_tuple_expect['flow_weight'] = 0
 sume_tuple_expect['flow_id'] = 0
 sume_tuple_expect['rank_op'] = 0

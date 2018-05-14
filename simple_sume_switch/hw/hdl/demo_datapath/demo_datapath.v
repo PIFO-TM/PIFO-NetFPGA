@@ -63,6 +63,8 @@ module demo_datapath
     parameter FLOW_ID_WIDTH        = 16,
     parameter FLOW_WEIGHT_POS      = FLOW_ID_POS+FLOW_ID_WIDTH,
     parameter FLOW_WEIGHT_WIDTH    = 8,
+    parameter RANK_RST_POS         = FLOW_WEIGHT_POS+FLOW_WEIGHT_WIDTH,
+    parameter RANK_RST_WIDTH       = 8,
 
     parameter MAX_NUM_FLOWS        = 4,
 
@@ -142,6 +144,8 @@ module demo_datapath
        .FLOW_ID_WIDTH     (FLOW_ID_WIDTH), 
        .FLOW_WEIGHT_POS   (FLOW_WEIGHT_POS), 
        .FLOW_WEIGHT_WIDTH (FLOW_WEIGHT_WIDTH),
+       .RANK_RST_POS      (RANK_RST_POS), 
+       .RANK_RST_WIDTH    (RANK_RST_WIDTH),
 
        .MAX_NUM_FLOWS     (MAX_NUM_FLOWS),
        .PIFO_DEPTH       (PIFO_DEPTH),
