@@ -187,13 +187,11 @@ module nf_datapath #(
 
     );
     
-    localparam C_AXIS_TUSER_DIGEST_WIDTH = 304;
-
     //internal connectivity
  
     wire [C_M_AXIS_DATA_WIDTH - 1:0]         m_axis_opl_tdata;
     wire [((C_M_AXIS_DATA_WIDTH / 8)) - 1:0] m_axis_opl_tkeep;
-    wire [C_AXIS_TUSER_DIGEST_WIDTH-1:0]     m_axis_opl_tuser;
+    wire [C_M_AXIS_TUSER_WIDTH-1:0]          m_axis_opl_tuser;
     wire                                     m_axis_opl_tvalid;
     wire                                     m_axis_opl_tready;
     wire                                     m_axis_opl_tlast;
@@ -372,7 +370,7 @@ module nf_datapath #(
        // input pkts
        .s_axis_tdata  (m_axis_opl_tdata),
        .s_axis_tkeep  (m_axis_opl_tkeep),
-       .s_axis_tuser  (m_axis_opl_tuser[C_M_AXIS_TUSER_WIDTH-1:0]),
+       .s_axis_tuser  (m_axis_opl_tuser),
        .s_axis_tvalid (m_axis_opl_tvalid),
        .s_axis_tready (m_axis_opl_tready),
        .s_axis_tlast  (m_axis_opl_tlast)
