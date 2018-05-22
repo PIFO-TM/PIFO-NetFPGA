@@ -31,6 +31,7 @@ VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/rank_pipe/rank_pipe.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_rank_tm/simple_rank_tm.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/rate_limiter/rate_limiter.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/trim_ts/trim_ts.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/simple_output_queues/simple_output_queues.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/demo_datapath/demo_datapath.v
 
 # ===================================== #

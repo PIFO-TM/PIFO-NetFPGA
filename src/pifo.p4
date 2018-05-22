@@ -46,7 +46,7 @@ typedef bit<32> IPv4Addr_t;
 #define REG_WRITE 8w1
 
 // bp_count register
-@Xilinx_MaxLatency(64)
+@Xilinx_MaxLatency(16)
 @Xilinx_ControlWidth(1)
 extern void bp_count_reg_rw(in bit<1> index,
                             in bit<16> newVal,
@@ -54,7 +54,7 @@ extern void bp_count_reg_rw(in bit<1> index,
                             out bit<16> result);
 
 // flow_offset register
-@Xilinx_MaxLatency(64)
+@Xilinx_MaxLatency(16)
 @Xilinx_ControlWidth(1)
 extern void flow_offset_reg_rw(in bit<1> index,
                                in bit<16> newVal,
@@ -62,7 +62,7 @@ extern void flow_offset_reg_rw(in bit<1> index,
                                out bit<16> result);
 
 // rank_op register
-@Xilinx_MaxLatency(64)
+@Xilinx_MaxLatency(16)
 @Xilinx_ControlWidth(1)
 extern void rank_op_reg_rw(in bit<1> index,
                            in bit<8> newVal,
@@ -72,13 +72,14 @@ extern void rank_op_reg_rw(in bit<1> index,
 #define L2_MAX_NUM_FLOWS 2
 
 // rank_op register
-@Xilinx_MaxLatency(64)
+@Xilinx_MaxLatency(16)
 @Xilinx_ControlWidth(L2_MAX_NUM_FLOWS)
 extern void flow_weight_reg_rw(in bit<L2_MAX_NUM_FLOWS> index,
                                in bit<8> newVal,
                                in bit<8> opCode,
                                out bit<8> result);
 
+#define MAX_NUM_QUEUES 4
 
 // standard Ethernet header
 header Ethernet_h { 
@@ -216,10 +217,17 @@ control TopPipe(inout Parsed_packet p,
             flow_offset_reg_rw(0, 0, REG_READ, flow_offset);
             
             bit<16> flow_id = p.tcp.srcPort - flow_offset;
+            if (flow_id >= (16w1 << L2_MAX_NUM_FLOWS)) {
+                flow_id = 0;
+            }
             // set flow_id field
             sume_metadata.flow_id = flow_id;
             // set q_id field
-            sume_metadata.q_id = flow_id[7:0];
+            if (flow_id[7:0] >= MAX_NUM_QUEUES) {
+                sume_metadata.q_id = 0;
+            } else {
+                sume_metadata.q_id = flow_id[7:0];
+            }
 
             // set rank_op field
             rank_op_reg_rw(0, 0, REG_READ, sume_metadata.rank_op);

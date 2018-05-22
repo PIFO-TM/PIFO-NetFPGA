@@ -483,13 +483,17 @@ module simple_rank_tm
    always @(*) begin
       // q_id on the input side
       curr_s_q_id = s_axis_fifo_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
-      if (curr_s_q_id >= NUM_QUEUES)
+      if (curr_s_q_id >= NUM_QUEUES) begin
           $display("WARNING: q_id on s_axis_fifo_tuser bus packet out of allowable range, q_id = %d\n", curr_s_q_id);
+          curr_s_q_id = 0;
+      end
 
       // q_id on the output side
       curr_m_q_id = m_axis_tuser[Q_ID_POS+Q_ID_WIDTH-1 : Q_ID_POS];
-      if (curr_m_q_id >= NUM_QUEUES)
+      if (curr_m_q_id >= NUM_QUEUES) begin
           $display("WARNING: q_id on m_axis_tuser bus packet out of allowable range, q_id = %d\n", curr_m_q_id);
+          curr_m_q_id = 0;
+      end
 
       s_q_state_next = s_q_state;
       m_q_state_next = m_q_state;

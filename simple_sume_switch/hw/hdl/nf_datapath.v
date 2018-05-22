@@ -203,20 +203,6 @@ module nf_datapath #(
     wire                                     s_axis_opl_tready;
     wire                                     s_axis_opl_tlast;
 
-    wire [C_M_AXIS_DATA_WIDTH - 1:0]         m_axis_tm_tdata;
-    wire [((C_M_AXIS_DATA_WIDTH / 8)) - 1:0] m_axis_tm_tkeep;
-    wire [C_M_AXIS_TUSER_WIDTH-1:0]          m_axis_tm_tuser;
-    wire                                     m_axis_tm_tvalid;
-    wire                                     m_axis_tm_tready;
-    wire                                     m_axis_tm_tlast;
-
-  
-    localparam Q_SIZE_WIDTH = 16;
-    wire [Q_SIZE_WIDTH-1:0]    nf0_q_size; 
-    wire [Q_SIZE_WIDTH-1:0]    nf1_q_size; 
-    wire [Q_SIZE_WIDTH-1:0]    nf2_q_size; 
-    wire [Q_SIZE_WIDTH-1:0]    nf3_q_size; 
-    wire [Q_SIZE_WIDTH-1:0]    dma_q_size; 
  
   //Input Arbiter
   input_arbiter_drr_ip 
@@ -360,13 +346,22 @@ module nf_datapath #(
        .nf2_m_axis_tready  (m_axis_2_tready),
        .nf2_m_axis_tlast   (m_axis_2_tlast),
 
-       // output pkts
-       .m_axis_tdata  (m_axis_tm_tdata),
-       .m_axis_tkeep  (m_axis_tm_tkeep),
-       .m_axis_tuser  (m_axis_tm_tuser),
-       .m_axis_tvalid (m_axis_tm_tvalid),
-       .m_axis_tready (m_axis_tm_tready),
-       .m_axis_tlast  (m_axis_tm_tlast),
+       // Output Pkts nf1
+       .nf1_m_axis_tdata   (m_axis_1_tdata),
+       .nf1_m_axis_tkeep   (m_axis_1_tkeep),
+       .nf1_m_axis_tuser   (m_axis_1_tuser),
+       .nf1_m_axis_tvalid  (m_axis_1_tvalid),
+       .nf1_m_axis_tready  (m_axis_1_tready),
+       .nf1_m_axis_tlast   (m_axis_1_tlast),
+
+       // Output Pkts nf0
+       .nf0_m_axis_tdata   (m_axis_0_tdata),
+       .nf0_m_axis_tkeep   (m_axis_0_tkeep),
+       .nf0_m_axis_tuser   (m_axis_0_tuser),
+       .nf0_m_axis_tvalid  (m_axis_0_tvalid),
+       .nf0_m_axis_tready  (m_axis_0_tready),
+       .nf0_m_axis_tlast   (m_axis_0_tlast),
+
        // input pkts
        .s_axis_tdata  (m_axis_opl_tdata),
        .s_axis_tkeep  (m_axis_opl_tkeep),
@@ -376,93 +371,5 @@ module nf_datapath #(
        .s_axis_tlast  (m_axis_opl_tlast)
    );
 
-
-      //Output queues
-       sss_output_queues_ip  
-     bram_output_queues_1 (
-      .axis_aclk(axis_aclk), 
-      .axis_resetn(axis_resetn), 
-      .s_axis_tdata   (m_axis_tm_tdata), 
-      .s_axis_tkeep   (m_axis_tm_tkeep), 
-      .s_axis_tuser   (m_axis_tm_tuser), 
-      .s_axis_tvalid  (m_axis_tm_tvalid), 
-      .s_axis_tready  (m_axis_tm_tready), 
-      .s_axis_tlast   (m_axis_tm_tlast), 
-      .m_axis_0_tdata (m_axis_0_tdata), 
-      .m_axis_0_tkeep (m_axis_0_tkeep), 
-      .m_axis_0_tuser (m_axis_0_tuser), 
-      .m_axis_0_tvalid(m_axis_0_tvalid), 
-      .m_axis_0_tready(m_axis_0_tready), 
-      .m_axis_0_tlast (m_axis_0_tlast), 
-      .m_axis_1_tdata (m_axis_1_tdata), 
-      .m_axis_1_tkeep (m_axis_1_tkeep), 
-      .m_axis_1_tuser (m_axis_1_tuser), 
-      .m_axis_1_tvalid(m_axis_1_tvalid), 
-      .m_axis_1_tready(m_axis_1_tready), 
-      .m_axis_1_tlast (m_axis_1_tlast), 
-      .m_axis_2_tdata (), 
-      .m_axis_2_tkeep (), 
-      .m_axis_2_tuser (), 
-      .m_axis_2_tvalid(), 
-      .m_axis_2_tready(), 
-      .m_axis_2_tlast (), 
-      .m_axis_3_tdata (), 
-      .m_axis_3_tkeep (), 
-      .m_axis_3_tuser (), 
-      .m_axis_3_tvalid(), 
-      .m_axis_3_tready(), 
-      .m_axis_3_tlast (), 
-      .m_axis_4_tdata (), 
-      .m_axis_4_tkeep (), 
-      .m_axis_4_tuser (), 
-      .m_axis_4_tvalid(), 
-      .m_axis_4_tready(), 
-      .m_axis_4_tlast (), 
-
-      .nf0_q_size(nf0_q_size),
-      .nf1_q_size(nf1_q_size),
-      .nf2_q_size(nf2_q_size),
-      .nf3_q_size(nf3_q_size),
-      .dma_q_size(dma_q_size),
-
-      .bytes_stored(), 
-      .pkt_stored(), 
-      .bytes_removed_0(), 
-      .bytes_removed_1(), 
-      .bytes_removed_2(), 
-      .bytes_removed_3(), 
-      .bytes_removed_4(), 
-      .pkt_removed_0(), 
-      .pkt_removed_1(), 
-      .pkt_removed_2(), 
-      .pkt_removed_3(), 
-      .pkt_removed_4(), 
-      .bytes_dropped(bytes_dropped), 
-      .pkt_dropped(pkt_dropped), 
-
-      .S_AXI_AWADDR(S2_AXI_AWADDR), 
-      .S_AXI_AWVALID(S2_AXI_AWVALID),
-      .S_AXI_WDATA(S2_AXI_WDATA),  
-      .S_AXI_WSTRB(S2_AXI_WSTRB),  
-      .S_AXI_WVALID(S2_AXI_WVALID), 
-      .S_AXI_BREADY(S2_AXI_BREADY), 
-      .S_AXI_ARADDR(S2_AXI_ARADDR), 
-      .S_AXI_ARVALID(S2_AXI_ARVALID),
-      .S_AXI_RREADY(S2_AXI_RREADY), 
-      .S_AXI_ARREADY(S2_AXI_ARREADY),
-      .S_AXI_RDATA(S2_AXI_RDATA),  
-      .S_AXI_RRESP(S2_AXI_RRESP),  
-      .S_AXI_RVALID(S2_AXI_RVALID), 
-      .S_AXI_WREADY(S2_AXI_WREADY), 
-      .S_AXI_BRESP(S2_AXI_BRESP),  
-      .S_AXI_BVALID(S2_AXI_BVALID), 
-      .S_AXI_AWREADY(S2_AXI_AWREADY),
-      .S_AXI_ACLK (axi_aclk), 
-      .S_AXI_ARESETN(axi_resetn)
-    ); 
-    
-    
-    
-    
 endmodule
 

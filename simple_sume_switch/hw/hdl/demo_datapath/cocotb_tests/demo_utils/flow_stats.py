@@ -43,11 +43,11 @@ class FlowStats(object):
                     # increment
                     byte_cnt += pkt.length
                 else:
-                    # insert 0 samples if needed
-                    for t in range(prev_time, cur_time, self.avg_interval)[0:-2]:
-                        avg_time = (t + self.avg_interval/2.0)
-                        flow_rates[flowID].append((avg_time, 0))
-                        prev_time = t + self.avg_interval
+#                    # insert 0 samples if needed
+#                    for t in range(prev_time, cur_time, self.avg_interval)[0:-2]:
+#                        avg_time = (t + self.avg_interval/2.0)
+#                        flow_rates[flowID].append((avg_time, 0))
+#                        prev_time = t + self.avg_interval
                     # update
                     interval = cur_time - prev_time # ns
                     rate = (byte_cnt*8.0)/float(interval)  # Gbps

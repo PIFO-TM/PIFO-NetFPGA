@@ -143,5 +143,20 @@ sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
 sss_sdnet_tuples.sume_tuple_expect['rank_rst'] = 1
 expPkt(pkt3, 'nf1')
 
+sport = 4
+pkt4 = pkt.copy()
+pkt4.sport = sport
+applyPkt(pkt4, 'nf0')
+sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
+sss_sdnet_tuples.sume_tuple_expect['flow_id'] = 0
+sss_sdnet_tuples.sume_tuple_expect['q_id'] = 0
+sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
+sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
+sss_sdnet_tuples.sume_tuple_expect['rank_rst'] = 0
+expPkt(pkt4, 'nf1')
+
+
+
+
 write_pcap_files()
 

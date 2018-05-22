@@ -53,6 +53,7 @@ module demo_datapath
     parameter C_S_AXIS_DATA_WIDTH  = 256,
     parameter C_M_AXIS_TUSER_WIDTH = 128,
     parameter C_S_AXIS_TUSER_WIDTH = 128,
+    parameter DST_PORT_POS         = 24,
     parameter BP_COUNT_POS         = 32,
     parameter BP_COUNT_WIDTH       = 16,
     parameter Q_ID_POS             = BP_COUNT_POS+BP_COUNT_WIDTH,
@@ -96,13 +97,21 @@ module demo_datapath
     input                                          nf2_m_axis_tready,
     output                                         nf2_m_axis_tlast,
 
-    // Master Pkt Stream Ports (outgoing pkts)
-    output     [C_M_AXIS_DATA_WIDTH - 1:0]         m_axis_tdata,
-    output     [((C_M_AXIS_DATA_WIDTH / 8)) - 1:0] m_axis_tkeep,
-    output     [C_M_AXIS_TUSER_WIDTH-1:0]          m_axis_tuser,
-    output                                         m_axis_tvalid,
-    input                                          m_axis_tready,
-    output                                         m_axis_tlast,
+    // nf1 Pkt Stream Ports (Output Pkts)
+    output     [C_M_AXIS_DATA_WIDTH - 1:0]         nf1_m_axis_tdata,
+    output     [((C_M_AXIS_DATA_WIDTH / 8)) - 1:0] nf1_m_axis_tkeep,
+    output     [C_M_AXIS_TUSER_WIDTH-1:0]          nf1_m_axis_tuser,
+    output                                         nf1_m_axis_tvalid,
+    input                                          nf1_m_axis_tready,
+    output                                         nf1_m_axis_tlast,
+
+    // nf0 Pkt Stream Ports (Output Pkts)
+    output     [C_M_AXIS_DATA_WIDTH - 1:0]         nf0_m_axis_tdata,
+    output     [((C_M_AXIS_DATA_WIDTH / 8)) - 1:0] nf0_m_axis_tkeep,
+    output     [C_M_AXIS_TUSER_WIDTH-1:0]          nf0_m_axis_tuser,
+    output                                         nf0_m_axis_tvalid,
+    input                                          nf0_m_axis_tready,
+    output                                         nf0_m_axis_tlast,
 
     // Slave Pkt Stream Ports (incomming pkts)
     input [C_S_AXIS_DATA_WIDTH - 1:0]              s_axis_tdata,
@@ -122,6 +131,13 @@ module demo_datapath
    wire                                          tm_m_axis_tvalid;
    wire                                          tm_m_axis_tready;
    wire                                          tm_m_axis_tlast;
+
+   wire [C_S_AXIS_DATA_WIDTH - 1:0]              rl_m_axis_tdata;
+   wire [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      rl_m_axis_tkeep;
+   wire [C_S_AXIS_TUSER_WIDTH-1:0]               rl_m_axis_tuser;
+   wire                                          rl_m_axis_tvalid;
+   wire                                          rl_m_axis_tready;
+   wire                                          rl_m_axis_tlast;
 
    localparam Q_SIZE_BITS = 16;
 
@@ -192,12 +208,12 @@ module demo_datapath
        .axis_aclk (axis_aclk),
        .axis_resetn (axis_resetn),
        // pkt_storage output pkts
-       .m_axis_tdata  (m_axis_tdata),
-       .m_axis_tkeep  (m_axis_tkeep),
-       .m_axis_tuser  (m_axis_tuser),
-       .m_axis_tvalid (m_axis_tvalid),
-       .m_axis_tready (m_axis_tready),
-       .m_axis_tlast  (m_axis_tlast),
+       .m_axis_tdata  (rl_m_axis_tdata),
+       .m_axis_tkeep  (rl_m_axis_tkeep),
+       .m_axis_tuser  (rl_m_axis_tuser),
+       .m_axis_tvalid (rl_m_axis_tvalid),
+       .m_axis_tready (rl_m_axis_tready),
+       .m_axis_tlast  (rl_m_axis_tlast),
        // pkt_storage input pkts
        .s_axis_tdata  (tm_m_axis_tdata),
        .s_axis_tkeep  (tm_m_axis_tkeep),
@@ -206,6 +222,36 @@ module demo_datapath
        .s_axis_tready (tm_m_axis_tready),
        .s_axis_tlast  (tm_m_axis_tlast)
    );
+
+   //Output queues
+    simple_output_queues
+    #(
+        .DST_PORT_POS(DST_PORT_POS)
+    )
+    bram_output_queues
+    (
+        .axis_aclk(axis_aclk),
+        .axis_resetn(axis_resetn),
+        .s_axis_tdata   (rl_m_axis_tdata),
+        .s_axis_tkeep   (rl_m_axis_tkeep),
+        .s_axis_tuser   (rl_m_axis_tuser),
+        .s_axis_tvalid  (rl_m_axis_tvalid),
+        .s_axis_tready  (rl_m_axis_tready),
+        .s_axis_tlast   (rl_m_axis_tlast),
+        .m_axis_0_tdata (nf0_m_axis_tdata),
+        .m_axis_0_tkeep (nf0_m_axis_tkeep),
+        .m_axis_0_tuser (nf0_m_axis_tuser),
+        .m_axis_0_tvalid(nf0_m_axis_tvalid),
+        .m_axis_0_tready(nf0_m_axis_tready),
+        .m_axis_0_tlast (nf0_m_axis_tlast),
+        .m_axis_1_tdata (nf1_m_axis_tdata),
+        .m_axis_1_tkeep (nf1_m_axis_tkeep),
+        .m_axis_1_tuser (nf1_m_axis_tuser),
+        .m_axis_1_tvalid(nf1_m_axis_tvalid),
+        .m_axis_1_tready(nf1_m_axis_tready),
+        .m_axis_1_tlast (nf1_m_axis_tlast)
+    );
+
 
    trim_ts
    #(
@@ -266,6 +312,7 @@ module demo_datapath
        .qsize_2       (qsize_2),
        .qsize_3       (qsize_3)
    );
+
 
 `ifdef COCOTB_SIM
 initial begin

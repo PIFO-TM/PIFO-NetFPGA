@@ -63,7 +63,7 @@ module rr_rank
         // defaults
         busy = fifo_nearly_full;
 
-        fifo_wr_en = 0;
+        fifo_wr_en = insert;
         fifo_rank_in = 0;
 
         max_rank_r_next = max_rank_r;
@@ -73,7 +73,6 @@ module rr_rank
         end
 
         if (insert && flowID_in < MAX_NUM_FLOWS) begin
-            fifo_wr_en = 1;
             if (flow_last_rank_r[flowID_in] == 0) begin
                 // have not seen this flow before
                 fifo_rank_in = max_rank_r + 1;

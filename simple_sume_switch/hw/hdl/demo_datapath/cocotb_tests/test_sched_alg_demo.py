@@ -25,7 +25,6 @@ from demo_utils.queue_stats import QueueStats
 
 # # strict priority
 # PCAP_FILE = 'sched_data/strict/big_test/pkts.pcap'
-# RANK_FILE = 'sched_data/strict/big_test/ranks.json'
 # INGRESS_LINK_RATE = 10 # Gbps
 # EGRESS_LINK_RATE = 4 # Gbps
 # NUM_PKTS = 1500
@@ -33,7 +32,6 @@ from demo_utils.queue_stats import QueueStats
 
 # round robin
 PCAP_FILE = 'sched_data/round-robin/pkts.pcap'
-RANK_FILE = 'sched_data/round-robin/ranks.json'
 INGRESS_LINK_RATE = 10 # Gbps
 EGRESS_LINK_RATE = 4 # Gbps
 NUM_PKTS = 1500
@@ -41,11 +39,19 @@ RANK_OP = 1
 
 # # weighted round robin
 # PCAP_FILE = 'sched_data/weighted-round-robin/pkts.pcap'
-# RANK_FILE = 'sched_data/weighted-round-robin/ranks.json'
 # INGRESS_LINK_RATE = 10 # Gbps
 # EGRESS_LINK_RATE = 4 # Gbps
 # NUM_PKTS = 1500
 # RANK_OP = 2
+
+# #### DEBUGGING ####
+# #PCAP_FILE = 'sched_data/debug/queue_1_pkts_1500.pcap'
+# PCAP_FILE = 'sched_data/debug/queues_2_3_pkts_1500.pcap'
+# INGRESS_LINK_RATE = 10 # Gbps
+# EGRESS_LINK_RATE = 4 # Gbps
+# NUM_PKTS = 200
+# RANK_OP = 0
+
 
 FLOW_WEIGHTS = {0:2, 1:1, 2:1, 3:1}
 START_DELAY = 100
@@ -56,6 +62,7 @@ RATE_AVG_INTERVAL = 1000 # ns
 #RATE_AVG_INTERVAL = 20000 # ns
 
 BP_COUNT = 256/(EGRESS_LINK_RATE*5) + 1
+#BP_COUNT = 0 
 
 @cocotb.coroutine
 def reset_dut(dut):
@@ -76,8 +83,6 @@ def reset_dut(dut):
 def make_pkts_meta_in():
     # read the pkts and rank values
     pkts_in = rdpcap(PCAP_FILE)
-#    with open(RANK_FILE) as f:
-#        ranks_in = json.load(f)
 
     pkts_in =  pkts_in[0:NUM_PKTS]
 #    ranks_in = ranks_in[0:NUM_PKTS]
@@ -133,7 +138,7 @@ def test_sched_alg_demo(dut):
     pkt_master = AXI4StreamMaster(dut, 's_axis', dut.axis_aclk)
 
     # Attach and AXI4StreamSlave to the output pkt interface
-    pkt_slave = AXI4StreamSlave(dut, 'm_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT)
+    pkt_slave = AXI4StreamSlave(dut, 'nf1_m_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT)
     input_logger = AXI4StreamSlave(dut, 'nf3_m_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT)
     output_logger = AXI4StreamSlave(dut, 'nf2_m_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT)
 

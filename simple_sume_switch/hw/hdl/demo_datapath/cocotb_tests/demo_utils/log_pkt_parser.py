@@ -30,7 +30,12 @@ class LogPktParser(object):
         Inputs:
             pkt_bufs - a list of raw pkt buffers
         """
-        return [self.parse_pkt(buf) for buf in pkt_bufs if buf is not None]        
+        parsed_pkts = []
+        for buf in pkt_bufs:
+            pkt = self.parse_pkt(buf)
+            if pkt is not None:
+                parsed_pkts.append(pkt)
+        return parsed_pkts
 
     def parse_pkt(self, pkt):
         try:
