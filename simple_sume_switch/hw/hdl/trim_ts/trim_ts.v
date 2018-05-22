@@ -119,7 +119,7 @@ module trim_ts
    //---------------------- Wires and Regs ---------------------------- 
    reg  d_fifo_wr_en;
    reg  d_fifo_rd_en;
-   reg [C_M_AXIS_DATA_WIDTH+C_M_AXIS_DATA_WIDTH/8+1:0] d_fifo_din;
+   reg [C_M_AXIS_DATA_WIDTH+C_M_AXIS_DATA_WIDTH/8:0] d_fifo_din;
    wire d_fifo_nearly_full;
    wire d_fifo_empty;
 

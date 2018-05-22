@@ -85,13 +85,16 @@ def make_pkts_meta_in():
     pkts_in = rdpcap(PCAP_FILE)
 
     pkts_in =  pkts_in[0:NUM_PKTS]
-#    ranks_in = ranks_in[0:NUM_PKTS]
-#    assert(len(pkts_in) == len(ranks_in))
+#    rst_pkt = Ether(dst='08:11:11:11:11:08', src='ff:ff:ff:ff:ff:ff') / IP(src='10.0.0.2', dst='10.0.0.1') / TCP(sport=1) / ('\x00'*10)
+#    pkts_in.append(rst_pkt)
+#    final_pkt = Ether(dst='08:11:11:11:11:08', src='08:22:22:22:22:08') / IP(src='10.0.0.2', dst='10.0.0.1') / TCP(sport=1) / ('\x00'*10)
+#    pkts_in.append(final_pkt)
 
     meta_in = []
     for pkt in pkts_in:
         flowID = pkt.sport
-        meta = Metadata(pkt_len=len(pkt), src_port=0b00000001, dst_port=0b00000100, bp_count=BP_COUNT, q_id=flowID, rank_op=RANK_OP, flow_id=flowID, flow_weight=FLOW_WEIGHTS[flowID])
+        rank_rst = 1 if pkt[Ether].src == 'ff:ff:ff:ff:ff:ff' else 0
+        meta = Metadata(pkt_len=len(pkt), src_port=0b00000001, dst_port=0b00000100, bp_count=BP_COUNT, q_id=flowID, rank_op=RANK_OP, flow_id=flowID, flow_weight=FLOW_WEIGHTS[flowID], rank_rst=rank_rst)
         tuser = BinaryValue(bits=len(meta)*8, bigEndian=False)
         tuser.set_buff(str(meta))
         meta_in.append(tuser)
