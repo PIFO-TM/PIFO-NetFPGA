@@ -6,10 +6,11 @@ from log_pkt_parser import LogPktParser
 
 def show_log_pkt(pkt):
     pkt_buf = str(pkt)
-    # Parse the logged pkt
-    pkt_parser = LogPktParser()
-    log_pkt = pkt_parser.parse_pkts(pkt_buf)
-    print 'Recived Pkt: {}'.format(str(log_pkt))
+    if len(pkt) >= 64:
+        # Parse the logged pkt
+        pkt_parser = LogPktParser()
+        log_pkts = pkt_parser.parse_pkts([pkt_buf])
+        print 'Recived Pkt: {}'.format(str(log_pkts[0]))
 
 def main():
     parser = argparse.ArgumentParser()
