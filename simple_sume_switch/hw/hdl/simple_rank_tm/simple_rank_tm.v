@@ -359,7 +359,7 @@ module simple_rank_tm
               // Wait until the first word of the pkt
               if (s_axis_fifo_tready && s_axis_fifo_tvalid) begin
                   pipe_rst_r_next = s_axis_fifo_tuser[RANK_RST_POS];
-                  if (s_axis_tready_storage & ifsm_pipe_ready & (q_size_r[s_q_id] < QUEUE_LIMIT - MAX_PKT_SIZE) & ~s_axis_fifo_tuser[RANK_RST_POS]) begin
+                  if (s_axis_tready_storage & ifsm_pipe_ready & (q_size_r[curr_s_q_id] < QUEUE_LIMIT - MAX_PKT_SIZE) & ~s_axis_fifo_tuser[RANK_RST_POS]) begin
                       // write the 1st word of the pkt to storage
                       s_axis_tvalid_storage = 1;
                       // Kick off the PIFO writing state machine
