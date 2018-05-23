@@ -42,7 +42,7 @@ module free_list_fifo
       parameter MAX_DEPTH_BITS = 3,
       parameter PROG_FULL_THRESHOLD = 2**MAX_DEPTH_BITS - 1,
       // the number of values to add to the fifo upon reset
-      parameter MAX_VAL = 2**MAX_DEPTH_BITS - 1)
+      parameter MAX_VAL = 2**MAX_DEPTH_BITS - 2)
     (
 
      input [WIDTH-1:0] din,     // Data in

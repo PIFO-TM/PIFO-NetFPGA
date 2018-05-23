@@ -208,7 +208,7 @@ module pifo_pkt_storage
    //-------------------- Modules and Logic ---------------------------
   
    /* Segment free list */
-   free_list_fifo #(.WIDTH(SEG_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(SEG_BRAM_DEPTH)), .MAX_VAL(SEG_BRAM_DEPTH-1))
+   free_list_fifo #(.WIDTH(SEG_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(SEG_BRAM_DEPTH)), .MAX_VAL(SEG_BRAM_DEPTH-2))
       seg_fl_fifo
         (.din         (seg_fl_addr_in),     // Data in
          .wr_en       (seg_fl_wr_en),                                // Write enable
@@ -223,7 +223,7 @@ module pifo_pkt_storage
          );
 
    /* Metadata free list */
-   free_list_fifo #(.WIDTH(META_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(META_BRAM_DEPTH)), .MAX_VAL(META_BRAM_DEPTH-1))
+   free_list_fifo #(.WIDTH(META_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(META_BRAM_DEPTH)), .MAX_VAL(META_BRAM_DEPTH-2))
       meta_fl_fifo
         (.din         (meta_fl_addr_in),     // Data in
          .wr_en       (meta_fl_wr_en),                                // Write enable
@@ -332,7 +332,7 @@ module pifo_pkt_storage
                       // If this is the end of the pkt => write into segment_bram
                       seg_bram_wr_we = 1;
                       seg_bram_wr_addr = cur_seg_ptr;
-                      seg_bram_din = {s_axis_pkt_tdata, s_axis_pkt_tkeep, {C_S_AXIS_DATA_WIDTH{1'b0}}, {(C_S_AXIS_DATA_WIDTH/8){1'b0}}, {SEG_ADDR_WIDTH{1'b1}}};
+                      seg_bram_din = {s_axis_pkt_tdata, s_axis_pkt_tkeep, {C_S_AXIS_DATA_WIDTH{1'b0}}, {(C_S_AXIS_DATA_WIDTH/8){1'b0}}, null_seg_ptr};
                       // transition to START_WORD
                       ifsm_state_next = START_WORD;
                   end
@@ -502,7 +502,7 @@ module pifo_pkt_storage
                   seg_word_two_tdata_next = seg_word_two_tdata_out;
                   seg_word_two_tkeep_next = seg_word_two_tkeep_out;
                   rfsm_cur_seg_ptr_next = next_seg_ptr_out;
-                  if (seg_word_two_tkeep_out == 0) begin
+                  if ((seg_word_two_tkeep_out == 0) && (next_seg_ptr_out == null_seg_ptr)) begin
                       // If tkeep of second word is zero, this is the last word of the pkt
                       m_axis_pkt_tlast = 1;
                       m_axis_pkt_tlast_reg_next = 1;
@@ -565,7 +565,7 @@ module pifo_pkt_storage
               seg_word_two_tdata_next = seg_word_two_tdata_out;
               seg_word_two_tkeep_next = seg_word_two_tkeep_out;
               rfsm_cur_seg_ptr_next = next_seg_ptr_out;
-              if (seg_word_two_tkeep_out == 0) begin
+              if ((seg_word_two_tkeep_out == 0) && (next_seg_ptr_out == null_seg_ptr)) begin
                   // If tkeep of second word is zero, this is the last word of the pkt
                   m_axis_pkt_tlast = 1;
                   m_axis_pkt_tlast_reg_next = 1;

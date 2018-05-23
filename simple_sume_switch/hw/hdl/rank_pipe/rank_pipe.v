@@ -43,8 +43,9 @@ module rank_pipe
 
     parameter STRICT_OP = 0,
     parameter RR_OP     = 1,
-    parameter WRR_OP    = 2,
-    parameter NUM_RANK_OPS = 3
+//    parameter WRR_OP    = 2,
+
+    parameter NUM_RANK_OPS = 2
 )
 (
     input                              rst,
@@ -159,28 +160,28 @@ module rank_pipe
         .meta_out        (pipe_meta_out[RR_OP])
     );
 
-    wrr_rank
-    #(
-        .FLOW_ID_WIDTH     (FLOW_ID_WIDTH),
-        .FLOW_WEIGHT_WIDTH (FLOW_WEIGHT_WIDTH),
-        .MAX_NUM_FLOWS     (MAX_NUM_FLOWS),
-        .RANK_WIDTH        (RANK_WIDTH),
-        .META_WIDTH        (META_WIDTH)
-    )
-    wrr_rank_pipe
-    (
-        .rst             (rst),
-        .clk             (clk),
-        .busy            (pipe_busy[WRR_OP]),
-        .insert          (pipe_insert[WRR_OP]),
-        .meta_in         (pipe_meta_in[WRR_OP]),
-        .flowID_in       (pipe_flowID_in[WRR_OP]),
-        .flow_weight_in  (pipe_flow_weight_in[WRR_OP]),
-        .remove          (pipe_remove[WRR_OP]),
-        .valid_out       (pipe_valid_out[WRR_OP]),
-        .rank_out        (pipe_rank_out[WRR_OP]),
-        .meta_out        (pipe_meta_out[WRR_OP])
-    );
+//    wrr_rank
+//    #(
+//        .FLOW_ID_WIDTH     (FLOW_ID_WIDTH),
+//        .FLOW_WEIGHT_WIDTH (FLOW_WEIGHT_WIDTH),
+//        .MAX_NUM_FLOWS     (MAX_NUM_FLOWS),
+//        .RANK_WIDTH        (RANK_WIDTH),
+//        .META_WIDTH        (META_WIDTH)
+//    )
+//    wrr_rank_pipe
+//    (
+//        .rst             (rst),
+//        .clk             (clk),
+//        .busy            (pipe_busy[WRR_OP]),
+//        .insert          (pipe_insert[WRR_OP]),
+//        .meta_in         (pipe_meta_in[WRR_OP]),
+//        .flowID_in       (pipe_flowID_in[WRR_OP]),
+//        .flow_weight_in  (pipe_flow_weight_in[WRR_OP]),
+//        .remove          (pipe_remove[WRR_OP]),
+//        .valid_out       (pipe_valid_out[WRR_OP]),
+//        .rank_out        (pipe_rank_out[WRR_OP]),
+//        .meta_out        (pipe_meta_out[WRR_OP])
+//    );
 
     fallthrough_small_fifo
        #(
@@ -207,11 +208,13 @@ module rank_pipe
     always @(*) begin
         // Logic to insert into FIFO
         busy = i_fifo_nearly_full;
-        i_fifo_wr_en = 0;
-        i_fifo_data_in = 0;
-        if (insert && (rank_op_in < NUM_RANK_OPS)) begin
-            i_fifo_wr_en = 1;
+        i_fifo_wr_en = insert;
+        if (rank_op_in < NUM_RANK_OPS) begin
             i_fifo_data_in = {rank_op_in, meta_in, flowID_in, flow_weight_in};
+        end
+        else begin
+            // do not drop metadata, set default rank_op
+            i_fifo_data_in = { {RANK_CODE_BITS{1'b0}}, meta_in, flowID_in, flow_weight_in};
         end
 
         // Logic to insert into rank pipe 
@@ -255,11 +258,11 @@ module rank_pipe
             o_fifo_wr_en = 1;
             o_fifo_data_in = {pipe_rank_out[RR_OP], pipe_meta_out[RR_OP]};
         end
-        else if (pipe_valid_out[WRR_OP]) begin
-            pipe_remove[WRR_OP] = 1;
-            o_fifo_wr_en = 1;
-            o_fifo_data_in = {pipe_rank_out[WRR_OP], pipe_meta_out[WRR_OP]};
-        end
+//        else if (pipe_valid_out[WRR_OP]) begin
+//            pipe_remove[WRR_OP] = 1;
+//            o_fifo_wr_en = 1;
+//            o_fifo_data_in = {pipe_rank_out[WRR_OP], pipe_meta_out[WRR_OP]};
+//        end
 
         // Logic to remove from output FIFO
         valid_out = ~o_fifo_empty;
