@@ -208,7 +208,7 @@ module pifo_pkt_storage
    //-------------------- Modules and Logic ---------------------------
   
    /* Segment free list */
-   free_list_fifo #(.WIDTH(SEG_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(SEG_BRAM_DEPTH)), .MAX_VAL(SEG_BRAM_DEPTH-1))
+   free_list_fifo #(.WIDTH(SEG_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(SEG_BRAM_DEPTH)), .MAX_VAL(SEG_BRAM_DEPTH-2))
       seg_fl_fifo
         (.din         (seg_fl_addr_in),     // Data in
          .wr_en       (seg_fl_wr_en),                                // Write enable
@@ -223,7 +223,7 @@ module pifo_pkt_storage
          );
 
    /* Metadata free list */
-   free_list_fifo #(.WIDTH(META_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(META_BRAM_DEPTH)), .MAX_VAL(META_BRAM_DEPTH-1))
+   free_list_fifo #(.WIDTH(META_ADDR_WIDTH), .MAX_DEPTH_BITS(log2(META_BRAM_DEPTH)), .MAX_VAL(META_BRAM_DEPTH-2))
       meta_fl_fifo
         (.din         (meta_fl_addr_in),     // Data in
          .wr_en       (meta_fl_wr_en),                                // Write enable
