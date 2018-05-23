@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 class FlowStats(object):
-    def __init__(self, log_pkt_list, avg_interval=1000):
+    def __init__(self, log_pkt_list, start_time, avg_interval=1000):
         """
         log_pkt_list: a list of LogPkts which have attributes: flowID, length (B), time (ns)
         avg_interval: # of ns to avg rates over
@@ -14,6 +14,7 @@ class FlowStats(object):
         self.avg_interval = avg_interval
         self.flow_pkts = self.parse_pkt_list(log_pkt_list)
         self.flow_rates = self.calc_flow_rates(self.flow_pkts)
+        self.start_time = start_time 
 
     def parse_pkt_list(self, log_pkt_list):
         """
@@ -73,12 +74,12 @@ class FlowStats(object):
         """
         line_generator = self.line_gen()
         for flowID, rate_points in self.flow_rates.items():
-            times = [point[0] for point in rate_points]
+            times = [(point[0] - self.start_time)*1e-6 for point in rate_points]
             rates = [point[1] for point in rate_points]
             if flowID is not None:
                 linestyle = line_generator.next()
                 plt.plot(times, rates, label='Flow {}'.format(flowID), linewidth=linewidth, linestyle=linestyle)
-        plt.xlabel('time (ns)')
+        plt.xlabel('time (ms)')
         plt.ylabel('rate (Gbps)')
         plt.title(title)
         #plt.legend(loc='lower right')

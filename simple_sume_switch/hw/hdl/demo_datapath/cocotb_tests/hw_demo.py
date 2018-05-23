@@ -14,26 +14,26 @@ RATE_AVG_INTERVAL = 100000 # ns
 EGRESS_LINK_RATE = 5
 
 def plot_stats(input_log_pkts, output_log_pkts):
+    start_time = input_log_pkts[0].time
     print "Calculating Input Rates ..."
-    input_stats = FlowStats(input_log_pkts, avg_interval=RATE_AVG_INTERVAL)
+    input_stats = FlowStats(input_log_pkts, start_time, avg_interval=RATE_AVG_INTERVAL)
     print "Calculating Output Rates ..."
-    output_stats = FlowStats(output_log_pkts, avg_interval=RATE_AVG_INTERVAL)
+    output_stats = FlowStats(output_log_pkts, start_time, avg_interval=RATE_AVG_INTERVAL)
     print 'Creating Plots ...'
     # create plots
     fig, axarr = plt.subplots(2)
     plt.sca(axarr[0])
-    input_stats.plot_rates('', linewidth=5)
+    input_stats.plot_rates('', ymax=12.0, linewidth=5)
     plt.ylabel('Input Rate (Gb/s)')
     plt.sca(axarr[1])
-    #output_stats.plot_rates('', ymax=EGRESS_LINK_RATE*1.5, linewidth=5)
-    output_stats.plot_rates('', linewidth=5)
+    output_stats.plot_rates('', ymax=12.0, linewidth=5)
     plt.ylabel('Output Rate (Gb/s)')
 
     # plot queue sizes
-    in_queue_stats = QueueStats(input_log_pkts)
+    in_queue_stats = QueueStats(input_log_pkts, start_time)
     in_queue_stats.plot_queues()
     plt.title('Input Queue Sizes')
-    out_queue_stats = QueueStats(output_log_pkts)
+    out_queue_stats = QueueStats(output_log_pkts, start_time)
     out_queue_stats.plot_queues()
     plt.title('Output Queue Sizes')
 

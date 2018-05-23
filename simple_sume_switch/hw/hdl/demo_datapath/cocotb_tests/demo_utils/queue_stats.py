@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 import sys, os
 
 class QueueStats(object):
-    def __init__(self, log_pkt_list):
+    def __init__(self, log_pkt_list, start_time):
         """
         log_pkt_list: log_pkt_list: a list of LogPkts which have attributes: qsizes (64B chunks) and time (ns)
         """
+        self.start_time = start_time
         self.qsizes, self.times = self.parse_pkt_list(log_pkt_list)
 
     def parse_pkt_list(self, log_pkt_list):
@@ -18,7 +19,7 @@ class QueueStats(object):
             print >> sys.stderr, "ERROR: QueueStats.parse_pkt_list: len(log_pkt_list) = 0"
             sys.exit(1)
 
-        times = [pkt.time for pkt in log_pkt_list]
+        times = [(pkt.time-self.start_time)*1e-6 for pkt in log_pkt_list]
         num_queues = len(log_pkt_list[0].qsizes)
         qsizes = {i:[] for i in range(num_queues)}
         for pkt in log_pkt_list:
@@ -41,7 +42,7 @@ class QueueStats(object):
             linestyle = line_generator.next()
             plt.plot(self.times, sizes, linewidth=5, label='Queue {}'.format(q_id), linestyle=linestyle)
     #    plt.title('Queue Sizes')
-        plt.xlabel('Time (ns)')
+        plt.xlabel('Time (ms)')
         plt.ylabel('Queue size (64B segments)')
         plt.legend()
 
