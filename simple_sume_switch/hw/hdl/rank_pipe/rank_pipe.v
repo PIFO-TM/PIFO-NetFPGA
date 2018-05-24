@@ -42,10 +42,10 @@ module rank_pipe
     parameter META_WIDTH = 16,
 
     parameter STRICT_OP = 0,
-    parameter RR_OP     = 1,
+//    parameter RR_OP     = 1,
 //    parameter WRR_OP    = 2,
 
-    parameter NUM_RANK_OPS = 2
+    parameter NUM_RANK_OPS = 1
 )
 (
     input                              rst,
@@ -139,26 +139,26 @@ module rank_pipe
         .meta_out        (pipe_meta_out[STRICT_OP])
     );
 
-    rr_rank
-    #(
-        .FLOW_ID_WIDTH     (FLOW_ID_WIDTH),
-        .MAX_NUM_FLOWS     (MAX_NUM_FLOWS),
-        .RANK_WIDTH        (RANK_WIDTH),
-        .META_WIDTH        (META_WIDTH)
-    )
-    rr_rank_pipe
-    (
-        .rst             (rst),
-        .clk             (clk),
-        .busy            (pipe_busy[RR_OP]),
-        .insert          (pipe_insert[RR_OP]),
-        .meta_in         (pipe_meta_in[RR_OP]),
-        .flowID_in       (pipe_flowID_in[RR_OP]),
-        .remove          (pipe_remove[RR_OP]),
-        .valid_out       (pipe_valid_out[RR_OP]),
-        .rank_out        (pipe_rank_out[RR_OP]),
-        .meta_out        (pipe_meta_out[RR_OP])
-    );
+//    rr_rank
+//    #(
+//        .FLOW_ID_WIDTH     (FLOW_ID_WIDTH),
+//        .MAX_NUM_FLOWS     (MAX_NUM_FLOWS),
+//        .RANK_WIDTH        (RANK_WIDTH),
+//        .META_WIDTH        (META_WIDTH)
+//    )
+//    rr_rank_pipe
+//    (
+//        .rst             (rst),
+//        .clk             (clk),
+//        .busy            (pipe_busy[RR_OP]),
+//        .insert          (pipe_insert[RR_OP]),
+//        .meta_in         (pipe_meta_in[RR_OP]),
+//        .flowID_in       (pipe_flowID_in[RR_OP]),
+//        .remove          (pipe_remove[RR_OP]),
+//        .valid_out       (pipe_valid_out[RR_OP]),
+//        .rank_out        (pipe_rank_out[RR_OP]),
+//        .meta_out        (pipe_meta_out[RR_OP])
+//    );
 
 //    wrr_rank
 //    #(
@@ -218,21 +218,21 @@ module rank_pipe
         end
 
         // Logic to insert into rank pipe 
-        // defaults
         i_fifo_rd_en = 0;
         for (i=0; i<NUM_RANK_OPS; i=i+1) begin
-            pipe_insert[i] = 0;
-            pipe_meta_in[i] = 0;
-            pipe_flowID_in[i] = 0;
-            pipe_flow_weight_in[i] = 0;
-        end
-
-        if (~pipe_busy[i_fifo_rank_op_out] & ~i_fifo_empty) begin
-            i_fifo_rd_en = 1;
-            pipe_insert[i_fifo_rank_op_out] = 1;
-            pipe_meta_in[i_fifo_rank_op_out] = i_fifo_meta_out;
-            pipe_flowID_in[i_fifo_rank_op_out] = i_fifo_flowID_out;
-            pipe_flow_weight_in[i_fifo_rank_op_out] = i_fifo_flow_weight_out;
+            if ((i == i_fifo_rank_op_out) && ~i_fifo_empty && ~pipe_busy[i]) begin
+                i_fifo_rd_en = 1;
+                pipe_insert[i_fifo_rank_op_out] = 1;
+                pipe_meta_in[i_fifo_rank_op_out] = i_fifo_meta_out;
+                pipe_flowID_in[i_fifo_rank_op_out] = i_fifo_flowID_out;
+                pipe_flow_weight_in[i_fifo_rank_op_out] = i_fifo_flow_weight_out;
+            end
+            else begin
+                pipe_insert[i] = 0;
+                pipe_meta_in[i] = 0;
+                pipe_flowID_in[i] = 0;
+                pipe_flow_weight_in[i] = 0;
+            end
         end
     end
 
@@ -253,11 +253,11 @@ module rank_pipe
             o_fifo_wr_en = 1;
             o_fifo_data_in = {pipe_rank_out[STRICT_OP], pipe_meta_out[STRICT_OP]};
         end
-        else if (pipe_valid_out[RR_OP]) begin
-            pipe_remove[RR_OP] = 1;
-            o_fifo_wr_en = 1;
-            o_fifo_data_in = {pipe_rank_out[RR_OP], pipe_meta_out[RR_OP]};
-        end
+//        else if (pipe_valid_out[RR_OP]) begin
+//            pipe_remove[RR_OP] = 1;
+//            o_fifo_wr_en = 1;
+//            o_fifo_data_in = {pipe_rank_out[RR_OP], pipe_meta_out[RR_OP]};
+//        end
 //        else if (pipe_valid_out[WRR_OP]) begin
 //            pipe_remove[WRR_OP] = 1;
 //            o_fifo_wr_en = 1;
