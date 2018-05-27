@@ -42,10 +42,10 @@ module rank_pipe
     parameter META_WIDTH = 16,
 
     parameter STRICT_OP = 0,
-//    parameter RR_OP     = 1,
+    parameter RR_OP     = 1,
 //    parameter WRR_OP    = 2,
 
-    parameter NUM_RANK_OPS = 1
+    parameter NUM_RANK_OPS = 2
 )
 (
     input                              rst,
@@ -139,26 +139,26 @@ module rank_pipe
         .meta_out        (pipe_meta_out[STRICT_OP])
     );
 
-//    rr_rank
-//    #(
-//        .FLOW_ID_WIDTH     (FLOW_ID_WIDTH),
-//        .MAX_NUM_FLOWS     (MAX_NUM_FLOWS),
-//        .RANK_WIDTH        (RANK_WIDTH),
-//        .META_WIDTH        (META_WIDTH)
-//    )
-//    rr_rank_pipe
-//    (
-//        .rst             (rst),
-//        .clk             (clk),
-//        .busy            (pipe_busy[RR_OP]),
-//        .insert          (pipe_insert[RR_OP]),
-//        .meta_in         (pipe_meta_in[RR_OP]),
-//        .flowID_in       (pipe_flowID_in[RR_OP]),
-//        .remove          (pipe_remove[RR_OP]),
-//        .valid_out       (pipe_valid_out[RR_OP]),
-//        .rank_out        (pipe_rank_out[RR_OP]),
-//        .meta_out        (pipe_meta_out[RR_OP])
-//    );
+    rr_rank
+    #(
+        .FLOW_ID_WIDTH     (FLOW_ID_WIDTH),
+        .MAX_NUM_FLOWS     (MAX_NUM_FLOWS),
+        .RANK_WIDTH        (RANK_WIDTH),
+        .META_WIDTH        (META_WIDTH)
+    )
+    rr_rank_pipe
+    (
+        .rst             (rst),
+        .clk             (clk),
+        .busy            (pipe_busy[RR_OP]),
+        .insert          (pipe_insert[RR_OP]),
+        .meta_in         (pipe_meta_in[RR_OP]),
+        .flowID_in       (pipe_flowID_in[RR_OP]),
+        .remove          (pipe_remove[RR_OP]),
+        .valid_out       (pipe_valid_out[RR_OP]),
+        .rank_out        (pipe_rank_out[RR_OP]),
+        .meta_out        (pipe_meta_out[RR_OP])
+    );
 
 //    wrr_rank
 //    #(
@@ -253,11 +253,11 @@ module rank_pipe
             o_fifo_wr_en = 1;
             o_fifo_data_in = {pipe_rank_out[STRICT_OP], pipe_meta_out[STRICT_OP]};
         end
-//        else if (pipe_valid_out[RR_OP]) begin
-//            pipe_remove[RR_OP] = 1;
-//            o_fifo_wr_en = 1;
-//            o_fifo_data_in = {pipe_rank_out[RR_OP], pipe_meta_out[RR_OP]};
-//        end
+        else if (pipe_valid_out[RR_OP]) begin
+            pipe_remove[RR_OP] = 1;
+            o_fifo_wr_en = 1;
+            o_fifo_data_in = {pipe_rank_out[RR_OP], pipe_meta_out[RR_OP]};
+        end
 //        else if (pipe_valid_out[WRR_OP]) begin
 //            pipe_remove[WRR_OP] = 1;
 //            o_fifo_wr_en = 1;

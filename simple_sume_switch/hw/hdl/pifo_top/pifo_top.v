@@ -87,8 +87,8 @@ module pifo_top
     reg [RANK_WIDTH-1:0]     rank_in_r, rank_in_r_next;
     reg [META_WIDTH+TSTAMP_BITS-1:0]     meta_in_r, meta_in_r_next;
 
-    reg                  sl_min_rank_valid;
-    reg [RANK_WIDTH-1:0] sl_min_rank;
+//    reg                  sl_min_rank_valid;
+//    reg [RANK_WIDTH-1:0] sl_min_rank;
     reg                  insert_reg;
     reg                  insert_unknown;
 
@@ -384,12 +384,14 @@ module pifo_top
             sl_remove[p] = 0;
         end
 
-        sl_min_rank_valid = final_deq_sel_valid_r;
-        sl_min_rank = (sl_min_rank_valid) ? sl_rank_out[final_deq_sel_sl_r] : 0;
+//        sl_min_rank_valid = final_deq_sel_valid_r;
+//        sl_min_rank = (sl_min_rank_valid) ? sl_rank_out[final_deq_sel_sl_r] : 0;
 
         rank_in_val = rank_in;
-        insert_reg = (pr_max_valid && (rank_in_val < pr_max_rank)) || (sl_min_rank_valid && (rank_in_val < sl_min_rank) && ~pr_full) || (&sl_empty & ~pr_full);
-        insert_unknown = (pr_num_entries != 0 && ~pr_max_valid) || (~&sl_empty & ~sl_min_rank_valid & ~pr_full);
+//        insert_reg = (pr_max_valid && (rank_in_val < pr_max_rank)) || (sl_min_rank_valid && (rank_in_val < sl_min_rank) && ~pr_full) || (&sl_empty & ~pr_full);
+        insert_reg = (pr_max_valid && (rank_in_val < pr_max_rank)) || (&sl_empty & ~pr_full);
+//        insert_unknown = (pr_num_entries != 0 && ~pr_max_valid) || (~&sl_empty & ~sl_min_rank_valid & ~pr_full);
+        insert_unknown = (pr_num_entries != 0 && ~pr_max_valid);
 
         case (ifsm_state)
             IFSM_IDLE: begin
