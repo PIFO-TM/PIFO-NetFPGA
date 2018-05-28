@@ -73,7 +73,7 @@ module demo_datapath
     parameter PIFO_DEPTH = 4096,
     parameter PIFO_REG_DEPTH = 16,
     parameter STORAGE_MAX_PKTS = 2048,
-    parameter NUM_SKIP_LISTS = 11,
+    parameter NUM_SKIP_LISTS = 8,
     parameter NUM_QUEUES =  4
 )
 (

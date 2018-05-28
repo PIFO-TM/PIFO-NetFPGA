@@ -205,8 +205,8 @@ module nf_datapath #(
 
  
   //Input Arbiter
-  input_arbiter_drr_ip 
- input_arbiter_drr_v1_0 (
+  input_arbiter_ip 
+ input_arbiter_v1_0 (
       .axis_aclk(axis_aclk), 
       .axis_resetn(axis_resetn), 
       .m_axis_tdata (s_axis_opl_tdata), 
@@ -321,7 +321,7 @@ module nf_datapath #(
        .PIFO_DEPTH  (4096),
        .PIFO_REG_DEPTH (16),
        .STORAGE_MAX_PKTS (2048),
-       .NUM_SKIP_LISTS (11),
+       .NUM_SKIP_LISTS (8),
        .NUM_QUEUES (4)
    )
    demo_datapath_inst

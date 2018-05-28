@@ -74,10 +74,10 @@ set_property constrset constraints [get_runs impl_1]
 # Project 
 #####################################
 update_ip_catalog
-create_ip -name input_arbiter_drr -vendor NetFPGA -library NetFPGA -module_name input_arbiter_drr_ip
-set_property generate_synth_checkpoint false [get_files input_arbiter_drr_ip.xci]
-reset_target all [get_ips input_arbiter_drr_ip]
-generate_target all [get_ips input_arbiter_drr_ip]
+create_ip -name input_arbiter -vendor NetFPGA -library NetFPGA -module_name input_arbiter_ip
+set_property generate_synth_checkpoint false [get_files input_arbiter_ip.xci]
+reset_target all [get_ips input_arbiter_ip]
+generate_target all [get_ips input_arbiter_ip]
 
 create_ip -name sss_output_queues -vendor NetFPGA -library NetFPGA -module_name sss_output_queues_ip
 set_property generate_synth_checkpoint false [get_files sss_output_queues_ip.xci]

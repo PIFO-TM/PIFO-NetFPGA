@@ -71,11 +71,11 @@ set_property generate_synth_checkpoint false [get_files nf_sume_sdnet_ip.xci]
 reset_target all [get_ips nf_sume_sdnet_ip]
 generate_target all [get_ips nf_sume_sdnet_ip]
 
-create_ip -name input_arbiter_drr -vendor NetFPGA -library NetFPGA -module_name input_arbiter_drr_ip
-set_property -dict [list CONFIG.C_BASEADDR $INPUT_ARBITER_BASEADDR] [get_ips input_arbiter_drr_ip]
-set_property generate_synth_checkpoint false [get_files input_arbiter_drr_ip.xci]
-reset_target all [get_ips input_arbiter_drr_ip]
-generate_target all [get_ips input_arbiter_drr_ip]
+create_ip -name input_arbiter -vendor NetFPGA -library NetFPGA -module_name input_arbiter_ip
+set_property -dict [list CONFIG.C_BASEADDR $INPUT_ARBITER_BASEADDR] [get_ips input_arbiter_ip]
+set_property generate_synth_checkpoint false [get_files input_arbiter_ip.xci]
+reset_target all [get_ips input_arbiter_ip]
+generate_target all [get_ips input_arbiter_ip]
 
 create_ip -name sss_output_queues -vendor NetFPGA -library NetFPGA -module_name sss_output_queues_ip
 set_property -dict [list CONFIG.C_BASEADDR $OUTPUT_QUEUES_BASEADDR] [get_ips sss_output_queues_ip]

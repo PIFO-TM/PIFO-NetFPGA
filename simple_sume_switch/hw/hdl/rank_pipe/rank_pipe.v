@@ -67,7 +67,7 @@ module rank_pipe
 );
 
     // ------- localparams ------
-    localparam L2_MAX_DEPTH = 4; // 16 entries in FIFO
+    localparam L2_MAX_DEPTH = 6; // 64 entries in FIFO
     localparam INPUT_FIFO_WIDTH = RANK_CODE_BITS + META_WIDTH + FLOW_ID_WIDTH + FLOW_WEIGHT_WIDTH;
     localparam OUTPUT_FIFO_WIDTH = RANK_WIDTH + META_WIDTH;
 
@@ -248,21 +248,23 @@ module rank_pipe
             pipe_remove[j] = 0;
         end
 
-        if (pipe_valid_out[STRICT_OP]) begin
-            pipe_remove[STRICT_OP] = 1;
-            o_fifo_wr_en = 1;
-            o_fifo_data_in = {pipe_rank_out[STRICT_OP], pipe_meta_out[STRICT_OP]};
+        if (~o_fifo_nearly_full) begin
+            if (pipe_valid_out[STRICT_OP]) begin
+                pipe_remove[STRICT_OP] = 1;
+                o_fifo_wr_en = 1;
+                o_fifo_data_in = {pipe_rank_out[STRICT_OP], pipe_meta_out[STRICT_OP]};
+            end
+            else if (pipe_valid_out[RR_OP]) begin
+                pipe_remove[RR_OP] = 1;
+                o_fifo_wr_en = 1;
+                o_fifo_data_in = {pipe_rank_out[RR_OP], pipe_meta_out[RR_OP]};
+            end
+//            else if (pipe_valid_out[WRR_OP]) begin
+//                pipe_remove[WRR_OP] = 1;
+//                o_fifo_wr_en = 1;
+//                o_fifo_data_in = {pipe_rank_out[WRR_OP], pipe_meta_out[WRR_OP]};
+//            end
         end
-        else if (pipe_valid_out[RR_OP]) begin
-            pipe_remove[RR_OP] = 1;
-            o_fifo_wr_en = 1;
-            o_fifo_data_in = {pipe_rank_out[RR_OP], pipe_meta_out[RR_OP]};
-        end
-//        else if (pipe_valid_out[WRR_OP]) begin
-//            pipe_remove[WRR_OP] = 1;
-//            o_fifo_wr_en = 1;
-//            o_fifo_data_in = {pipe_rank_out[WRR_OP], pipe_meta_out[WRR_OP]};
-//        end
 
         // Logic to remove from output FIFO
         valid_out = ~o_fifo_empty;
