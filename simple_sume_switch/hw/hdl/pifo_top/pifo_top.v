@@ -42,6 +42,10 @@ module pifo_top
     localparam INSERT_SEARCH  = 2;
     localparam INSERT_SL      = 3;
 
+    localparam WAIT_VALID = 0;
+    localparam WRITE_REG  = 1;
+    localparam L2_REFILL_STATES = 1;
+
     localparam TSTAMP_BITS = 32;
     localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE - log2(NUM_SKIP_LISTS) + 1;
 //    localparam L2_SKIP_LIST_SIZE = L2_MAX_SIZE;
@@ -105,6 +109,11 @@ module pifo_top
     reg [L2_NUM_SL_FLOOR:0]   final_deq_sel_sl_r_next;
     reg [NUM_SKIP_LISTS-1:0]  val_or_empty;
     reg                       deq_condition;
+
+    // Refill State Machine Signals
+    reg [L2_REFILL_STATES-1:0]       refill_state, refill_state_next;
+    reg [RANK_WIDTH-1:0]             rep_rank_r, rep_rank_r_next;
+    reg [META_WIDTH+TSTAMP_BITS-1:0] rep_meta_r, rep_meta_r_next;
 
     /*------------ Modules and Logic ------------*/
 
@@ -462,23 +471,33 @@ module pifo_top
             end
         endcase
 
-
-        /* pifo_reg replenishment logic:
-         *   - If there is room in the pifo_reg 
-         *       && it's not busy
-         *       && the skip list output selection is valid
-         *       && we are not directly inserting into the pifo_reg
-         */
+        /* State machine to replenish pifo_reg_top from skip list(s) */
+        refill_state_next = refill_state;
         direct_pr_insert = (ifsm_state == INSERT_REG);
-        if (~pr_full & ~direct_pr_insert & ~pr_insert_last_r) begin // NOTE: removed ~remove check
-            // we should replenish the reg if the skip list dequeue selection is valid
-            if (final_deq_sel_valid_r & sl_valid_out[final_deq_sel_sl_r]) begin  // TODO: can we remove the dependency on final_deq_sel_valid_r_next?
-                pr_insert = 1;
-                pr_rank_in = sl_rank_out[final_deq_sel_sl_r];
-                pr_meta_in = sl_meta_out[final_deq_sel_sl_r];
-                sl_remove[final_deq_sel_sl_r] = 1;
+        rep_rank_r_next = rep_rank_r;
+        rep_meta_r_next = rep_meta_r;
+
+        case(refill_state)
+            WAIT_VALID: begin
+                // wait for the skip list output selection to be valid
+                if (final_deq_sel_valid_r & sl_valid_out[final_deq_sel_sl_r]) begin
+                    rep_rank_r_next = sl_rank_out[final_deq_sel_sl_r];
+                    rep_meta_r_next = sl_meta_out[final_deq_sel_sl_r];
+                    sl_remove[final_deq_sel_sl_r] = 1;
+                    refill_state_next = WRITE_REG;
+                end
             end
-        end
+
+            WRITE_REG: begin
+                // perform the insertion into the pifo_reg_top
+                if (~pr_full & ~direct_pr_insert & ~pr_insert_last_r) begin
+                    pr_insert = 1;
+                    pr_rank_in = rep_rank_r;
+                    pr_meta_in = rep_meta_r;
+                    refill_state_next = WAIT_VALID;
+                end
+            end
+        endcase
 
         // keep track of whether or not we inserted into the pifo_reg_top on the last cycle
         pr_insert_last_r_next = pr_insert;
@@ -491,12 +510,18 @@ module pifo_top
             ifsm_state <= IFSM_IDLE;
             rank_in_r <= 0;
             meta_in_r <= 0;
+            refill_state <= WAIT_VALID;
+            rep_rank_r <= 0;
+            rep_meta_r <= 0;
             pr_insert_last_r <= 0;
         end
         else begin
             ifsm_state <= ifsm_state_next;
             rank_in_r <= rank_in_r_next;
             meta_in_r <= meta_in_r_next;
+            refill_state <= refill_state_next;
+            rep_rank_r <= rep_rank_r_next;
+            rep_meta_r <= rep_meta_r_next;
             pr_insert_last_r <= pr_insert_last_r_next;
         end
     end
