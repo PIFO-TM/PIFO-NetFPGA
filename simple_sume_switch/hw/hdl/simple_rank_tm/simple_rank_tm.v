@@ -141,8 +141,7 @@ module simple_rank_tm
 
    localparam S_Q_WAIT_START = 0;
    localparam S_Q_WAIT_END_ENQ = 1;
-   localparam S_Q_WAIT_END_DROP = 2;
-   localparam L2_S_Q_NUM_STATES = 2;
+   localparam L2_S_Q_NUM_STATES = 1;
 
    localparam M_Q_WAIT_START = 0;
    localparam M_Q_WAIT_END   = 1;
@@ -180,7 +179,7 @@ module simple_rank_tm
    wire [PTRS_WIDTH-1:0]       pipe_meta_out;
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
-   reg pkt_in_accepted;
+   reg pkt_in_accepted, pkt_in_accepted_r, pkt_in_accepted_r_next;
 
    reg  [PTRS_WIDTH-1:0] pipe_meta_in_r, pipe_meta_in_r_next;
    reg  [RANK_OP_WIDTH-1:0] pipe_rank_op_in_r, pipe_rank_op_in_r_next;
@@ -352,6 +351,8 @@ module simple_rank_tm
       pipe_flow_weight_in_r_next = pipe_flow_weight_in_r;
       pipe_rst_r_next            = pipe_rst_r;
 
+      pkt_in_accepted_r_next = pkt_in_accepted_r;
+
       s_axis_fifo_tready = 1;
 
       case(ifsm_state)
@@ -372,6 +373,7 @@ module simple_rank_tm
                       // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
                       pkt_in_accepted = 1;
+                      pkt_in_accepted_r_next = 1;
 
                       // transition to WRITE_PIFO state
                       ifsm_state_next = FINISH_PKT;
@@ -379,18 +381,20 @@ module simple_rank_tm
                   else begin
                       // drop the pkt
                       pkt_in_accepted = 0;
+                      pkt_in_accepted_r_next = 0;
                       s_axis_tvalid_storage = 0;
                       ifsm_state_next = DROP_PKT;
                   end
               end
               else begin
                   pkt_in_accepted = 0;
+                  pkt_in_accepted_r_next = 0;
                   s_axis_tvalid_storage = 0;
               end
           end
 
           FINISH_PKT: begin
-              pkt_in_accepted = 1; 
+              pkt_in_accepted = pkt_in_accepted_r; 
               // Wait until the end of the pkt before going back to WAIT_START state
               s_axis_tvalid_storage = s_axis_fifo_tvalid;
               if (s_axis_fifo_tready && s_axis_fifo_tvalid && s_axis_fifo_tlast) begin
@@ -402,7 +406,7 @@ module simple_rank_tm
           end
 
           DROP_PKT: begin
-              pkt_in_accepted = 0; 
+              pkt_in_accepted = pkt_in_accepted_r; 
               s_axis_tvalid_storage = 0;
               // Wait until the end of the pkt before going back to WRITE_STORAGE state
               if (s_axis_fifo_tready && s_axis_fifo_tvalid && s_axis_fifo_tlast) begin
@@ -451,6 +455,7 @@ module simple_rank_tm
          pipe_flow_weight_in_r <= 0;
          pipe_rst_r <= 0;
          ifsm_pipe_state <= PIPE_START;
+         pkt_in_accepted_r <= 0;
       end
       else begin
          ifsm_state <= ifsm_state_next;
@@ -460,6 +465,7 @@ module simple_rank_tm
          pipe_flow_weight_in_r <= pipe_flow_weight_in_r_next;
          pipe_rst_r <= pipe_rst_r_next;
          ifsm_pipe_state <= ifsm_pipe_state_next;
+         pkt_in_accepted_r <= pkt_in_accepted_r_next;
       end
    end
 
@@ -510,21 +516,16 @@ module simple_rank_tm
           S_Q_WAIT_START: begin
               if (s_axis_fifo_tvalid & s_axis_fifo_tready) begin
                   s_q_id = curr_s_q_id;
-                  if (pkt_in_accepted) begin
-                      s_q_inc_val = 1;
-                      s_q_id_r_next = curr_s_q_id;
-                      s_q_update_size_r_next = 0;
-                      s_q_state_next = S_Q_WAIT_END_ENQ;
-                  end
-                  else begin
-                      s_q_state_next = S_Q_WAIT_END_DROP;
-                  end
+                  s_q_inc_val = pkt_in_accepted;
+                  s_q_id_r_next = curr_s_q_id;
+                  s_q_update_size_r_next = 0;
+                  s_q_state_next = S_Q_WAIT_END_ENQ;
               end
           end
 
           S_Q_WAIT_END_ENQ: begin
               // count 64B chunks of the packet (i.e. increment every other word, starting with the first word of the pkt)
-              if (s_axis_fifo_tvalid & s_axis_fifo_tready) begin
+              if (s_axis_fifo_tvalid & s_axis_fifo_tready & pkt_in_accepted) begin
                   if (s_q_update_size_r) begin
                       s_q_inc_val = 1;
                       s_q_update_size_r_next = 0;
@@ -535,12 +536,6 @@ module simple_rank_tm
                   end
               end
 
-              if (s_axis_fifo_tvalid & s_axis_fifo_tready & s_axis_fifo_tlast) begin
-                  s_q_state_next = S_Q_WAIT_START;
-              end
-          end
-
-          S_Q_WAIT_END_DROP: begin
               if (s_axis_fifo_tvalid & s_axis_fifo_tready & s_axis_fifo_tlast) begin
                   s_q_state_next = S_Q_WAIT_START;
               end
