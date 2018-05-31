@@ -77,7 +77,7 @@ module rate_limiter
     input [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      s_axis_tkeep,
     input [C_S_AXIS_TUSER_WIDTH-1:0]               s_axis_tuser,
     input                                          s_axis_tvalid,
-    output reg                                     s_axis_tready,
+    output                                         s_axis_tready,
     input                                          s_axis_tlast
 
 );
@@ -166,6 +166,8 @@ module rate_limiter
          .clk         (axis_aclk)
          );
 
+    assign s_axis_tready = (ifsm_state == WAIT_START) || (ifsm_state == RCV_WORD);
+
     /* Insertion State Machine */
     always @(*) begin
         //defaults
@@ -180,7 +182,6 @@ module rate_limiter
         case(ifsm_state)
             WAIT_START: begin
                 pkt_done_r_next = 0;
-                s_axis_tready = 1;
                 if (s_axis_tvalid) begin
                     d_fifo_wr_en = 1;
                     m_fifo_wr_en = 1;
@@ -195,7 +196,6 @@ module rate_limiter
             end
 
             ASSERT_BP: begin
-                s_axis_tready = 0;
                 if (bp_count_r >= bp_config_r) begin
                     bp_count_r_next = 1;
                     if (pkt_done_r)
@@ -209,7 +209,6 @@ module rate_limiter
             end
 
             RCV_WORD: begin
-                s_axis_tready = 1;
                 if (s_axis_tvalid) begin
                     d_fifo_wr_en = 1;
                     if (s_axis_tlast) begin

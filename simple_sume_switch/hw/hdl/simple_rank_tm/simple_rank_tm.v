@@ -179,7 +179,7 @@ module simple_rank_tm
    wire [PTRS_WIDTH-1:0]       pipe_meta_out;
    
    reg  [IFSM_NUM_STATES-1:0]           ifsm_state, ifsm_state_next;
-   reg pkt_in_accepted, pkt_in_accepted_r, pkt_in_accepted_r_next;
+   reg pkt_in_accepted_r, pkt_in_accepted_r_next;
 
    reg  [PTRS_WIDTH-1:0] pipe_meta_in_r, pipe_meta_in_r_next;
    reg  [RANK_OP_WIDTH-1:0] pipe_rank_op_in_r, pipe_rank_op_in_r_next;
@@ -351,8 +351,6 @@ module simple_rank_tm
       pipe_flow_weight_in_r_next = pipe_flow_weight_in_r;
       pipe_rst_r_next            = pipe_rst_r;
 
-      pkt_in_accepted_r_next = pkt_in_accepted_r;
-
       s_axis_fifo_tready = 1;
 
       case(ifsm_state)
@@ -372,7 +370,6 @@ module simple_rank_tm
                       // TODO: static simulation check that storage_ptr_out_tvalid == 1
                       // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
-                      pkt_in_accepted = 1;
                       pkt_in_accepted_r_next = 1;
 
                       // transition to WRITE_PIFO state
@@ -380,21 +377,19 @@ module simple_rank_tm
                   end
                   else begin
                       // drop the pkt
-                      pkt_in_accepted = 0;
                       pkt_in_accepted_r_next = 0;
                       s_axis_tvalid_storage = 0;
                       ifsm_state_next = DROP_PKT;
                   end
               end
               else begin
-                  pkt_in_accepted = 0;
                   pkt_in_accepted_r_next = 0;
                   s_axis_tvalid_storage = 0;
               end
           end
 
           FINISH_PKT: begin
-              pkt_in_accepted = pkt_in_accepted_r; 
+              pkt_in_accepted_r_next = pkt_in_accepted_r;
               // Wait until the end of the pkt before going back to WAIT_START state
               s_axis_tvalid_storage = s_axis_fifo_tvalid;
               if (s_axis_fifo_tready && s_axis_fifo_tvalid && s_axis_fifo_tlast) begin
@@ -406,7 +401,7 @@ module simple_rank_tm
           end
 
           DROP_PKT: begin
-              pkt_in_accepted = pkt_in_accepted_r; 
+              pkt_in_accepted_r_next = pkt_in_accepted_r;
               s_axis_tvalid_storage = 0;
               // Wait until the end of the pkt before going back to WRITE_STORAGE state
               if (s_axis_fifo_tready && s_axis_fifo_tvalid && s_axis_fifo_tlast) begin
@@ -415,6 +410,11 @@ module simple_rank_tm
               else begin
                   ifsm_state_next = DROP_PKT;
               end
+          end
+
+          default: begin
+              pkt_in_accepted_r_next = pkt_in_accepted_r;
+              s_axis_tvalid_storage = 0;
           end
       endcase // case(ifsm_state)
 
@@ -516,7 +516,7 @@ module simple_rank_tm
           S_Q_WAIT_START: begin
               if (s_axis_fifo_tvalid & s_axis_fifo_tready) begin
                   s_q_id = curr_s_q_id;
-                  s_q_inc_val = pkt_in_accepted;
+                  s_q_inc_val = pkt_in_accepted_r_next;
                   s_q_id_r_next = curr_s_q_id;
                   s_q_update_size_r_next = 0;
                   s_q_state_next = S_Q_WAIT_END_ENQ;
@@ -525,7 +525,7 @@ module simple_rank_tm
 
           S_Q_WAIT_END_ENQ: begin
               // count 64B chunks of the packet (i.e. increment every other word, starting with the first word of the pkt)
-              if (s_axis_fifo_tvalid & s_axis_fifo_tready & pkt_in_accepted) begin
+              if (s_axis_fifo_tvalid & s_axis_fifo_tready & pkt_in_accepted_r) begin
                   if (s_q_update_size_r) begin
                       s_q_inc_val = 1;
                       s_q_update_size_r_next = 0;
@@ -574,13 +574,13 @@ module simple_rank_tm
 
       /* Update queue sizes */
       for (j=0; j<NUM_QUEUES; j=j+1) begin
-          if (s_q_id == j && m_q_id == j) begin
+          if (s_q_id == j && m_q_id == j && (q_size_r[j] > 0 || s_q_inc_val > 0)) begin
               q_size_r_next[j] = q_size_r[j] + s_q_inc_val - m_q_dec_val; 
           end
           else if (s_q_id == j) begin
               q_size_r_next[j] = q_size_r[j] + s_q_inc_val; 
           end
-          else if (m_q_id == j) begin
+          else if (m_q_id == j && q_size_r[j] > 0) begin
               q_size_r_next[j] = q_size_r[j] - m_q_dec_val; 
           end
           else begin
