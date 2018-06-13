@@ -29,9 +29,7 @@ def test_req_arbiter(dut):
     dut.axis_resetn <= 1
     dut._log.debug("Out of reset")
 
-    requests = []
-    for i in range(NUM_PORTS):
-        requests.append(i)
+    num_reqs = NUM_PORTS
 
     # Attach ReqMaster to each input interface
     nf0_req_master = ReqMaster(dut, 'nf0_sel', dut.axis_aclk)
@@ -42,14 +40,14 @@ def test_req_arbiter(dut):
     # Attach ReqSlave to output interface
     req_slave = ReqSlave(dut, 'sel_out', dut.axis_aclk)
     # Start reading for output requests
-    slave_thread = cocotb.fork(req_slave.read_reqs(NUM_PORTS*len(requests)))
+    slave_thread = cocotb.fork(req_slave.read_reqs(NUM_PORTS*num_reqs))
 
     # start submitting requests
     delay = 20
-    nf0_req_thread = cocotb.fork(nf0_req_master.write_reqs(requests, delay))
-    nf1_req_thread = cocotb.fork(nf1_req_master.write_reqs(requests, delay))
-    nf2_req_thread = cocotb.fork(nf2_req_master.write_reqs(requests, delay))
-    nf3_req_thread = cocotb.fork(nf3_req_master.write_reqs(requests, delay))
+    nf0_req_thread = cocotb.fork(nf0_req_master.write_reqs(num_reqs, delay))
+    nf1_req_thread = cocotb.fork(nf1_req_master.write_reqs(num_reqs, delay))
+    nf2_req_thread = cocotb.fork(nf2_req_master.write_reqs(num_reqs, delay))
+    nf3_req_thread = cocotb.fork(nf3_req_master.write_reqs(num_reqs, delay))
 
     # wait for master threads to finish
     yield slave_thread.join()

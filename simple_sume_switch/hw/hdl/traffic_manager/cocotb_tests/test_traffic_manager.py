@@ -16,6 +16,8 @@ from scapy.all import Ether, IP, UDP, hexdump
 import sys, os
 import json
 
+NUM_PKTS = 4
+
 PERIOD = 5000
 
 @cocotb.test()
@@ -44,7 +46,7 @@ def test_traffic_manager(dut):
 
     # build the list of pkts and metadata to insert
     pkts_meta_in = [] 
-    for i in range(4):
+    for i in range(NUM_PKTS):
 #        pkt_len = random.randint(50, 1000)
         # build a packet
         pkt = Ether(dst='aa:aa:aa:aa:aa:aa', src='bb:bb:bb:bb:bb:bb')

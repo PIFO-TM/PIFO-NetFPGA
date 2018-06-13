@@ -82,13 +82,11 @@ def test_port_tm(dut):
     # Read output pkts
     pkt_slave_thread = cocotb.fork(pkt_slave.read_n_pkts(len(pkts_in)))
 
-    # Create the requests
-    requests = [1 for r in ranks_in]
 
     # start submitting read requests
     delay = 20
     #nf0_req_thread = cocotb.fork(nf0_req_master.write_reqs(requests, delay))
-    nf1_req_thread = cocotb.fork(nf1_req_master.write_reqs(requests, delay))
+    nf1_req_thread = cocotb.fork(nf1_req_master.write_reqs(len(ranks_in), delay))
     #nf2_req_thread = cocotb.fork(nf2_req_master.write_reqs(requests, delay))
     #nf3_req_thread = cocotb.fork(nf3_req_master.write_reqs(requests, delay))
 

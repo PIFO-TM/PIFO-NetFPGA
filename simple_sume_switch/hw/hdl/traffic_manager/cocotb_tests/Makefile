@@ -16,11 +16,14 @@ VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pkt_storage/pifo_pkt_storage.v
 
 # pifo source files
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_reg/pifo_reg.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/det_skip_list/det_skip_list.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/pifo_top/pifo_top.v
 
 # port_tm source files
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/axi_stream_pipeline/axi_stream_pipeline.v
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/port_tm/req_arbiter.v
-VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/port_tm/port_tm.v
+#VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/port_tm/port_tm.v
+VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/port_tm/port_tm_bp.v
 
 # top level source files
 VERILOG_SOURCES += $(NF_DESIGN_DIR)/hw/hdl/traffic_manager/port_selector.v

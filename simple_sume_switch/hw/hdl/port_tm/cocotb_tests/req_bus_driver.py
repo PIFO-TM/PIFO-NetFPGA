@@ -5,31 +5,26 @@ from cocotb.binary import BinaryValue
 
 class ReqMaster(BusDriver):
 
-    _signals = ["valid", "queue"]
+    _signals = ["valid"]
     _optional_signals = []
 
 
     def __init__(self, entity, name, clock):
         BusDriver.__init__(self, entity, name, clock)
 
-        self.queue_width = len(self.bus.queue) # bits
-
         # Drive default values onto bus
         self.bus.valid.setimmediatevalue(0)
-        self.bus.queue.setimmediatevalue(BinaryValue(value = 0x0, bits = self.queue_width, bigEndian = False))
 
 
     @cocotb.coroutine
-    def write_reqs(self, reqs, delay):
+    def write_reqs(self, num_reqs, delay):
         """
         Submit requests
         """
         yield RisingEdge(self.clock)
 
-        for req in reqs:
-            bin_req = BinaryValue(value = req, bits = self.queue_width, bigEndian = False)
+        for i in range(num_reqs):
             self.bus.valid <= 1
-            self.bus.queue <= bin_req
             yield RisingEdge(self.clock)
             self.bus.valid <= 0
             # delay between sucessive requests
