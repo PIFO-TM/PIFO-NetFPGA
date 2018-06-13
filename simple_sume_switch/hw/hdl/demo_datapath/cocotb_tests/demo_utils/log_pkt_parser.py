@@ -35,6 +35,7 @@ class LogPktParser(object):
             pkt = self.parse_pkt(buf)
             if pkt is not None:
                 parsed_pkts.append(pkt)
+        parsed_pkts.sort(key=lambda x: x.time)
         return parsed_pkts
 
     def parse_pkt(self, pkt):
@@ -58,5 +59,7 @@ class LogPktParser(object):
         except struct.error as e:
             print >> sys.stderr, "WARNING: could not unpack packet to obtain all fields"
             return None
-
+        except socket.error as e:
+            print >> sys.stderr, "WARNING: packed IP wrong length for inet_ntoa"
+            return None
 

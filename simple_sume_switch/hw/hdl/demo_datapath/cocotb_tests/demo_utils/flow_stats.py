@@ -73,9 +73,12 @@ class FlowStats(object):
         Plots the flow rates
         """
         line_generator = self.line_gen()
+        max_rate = 0
         for flowID, rate_points in self.flow_rates.items():
             times = [(point[0] - self.start_time)*1e-6 for point in rate_points]
             rates = [point[1] for point in rate_points]
+            if len(rates) > 0:
+                max_rate = max(rates) if max(rates) > max_rate else max_rate
             if flowID is not None:
                 linestyle = line_generator.next()
                 plt.plot(times, rates, label='Flow {}'.format(flowID), linewidth=linewidth, linestyle=linestyle)
@@ -85,7 +88,7 @@ class FlowStats(object):
         #plt.legend(loc='lower right')
         plt.legend(loc='upper left')
         if ymax is not None:
-            plt.ylim(0, ymax)
+            plt.ylim(0, max_rate)
 
 
 

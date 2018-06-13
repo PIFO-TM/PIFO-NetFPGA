@@ -29,9 +29,10 @@ class QueueStats(object):
 
     def line_gen(self):
         lines = ['-', '--', ':', '-.']
+        colors = ['b', 'g', 'r', 'm']
         i = 0
         while True:
-            yield lines[i]
+            yield lines[i], colors[i]
             i += 1
             i = i % len(lines)
     
@@ -39,10 +40,11 @@ class QueueStats(object):
         line_generator = self.line_gen()
         plt.figure()
         for q_id, sizes in self.qsizes.items():
-            linestyle = line_generator.next()
+            linestyle, color = line_generator.next()
             plt.plot(self.times, sizes, linewidth=5, label='Queue {}'.format(q_id), linestyle=linestyle)
+            #plt.scatter(self.times, sizes, label='Queue {}'.format(q_id), c=color)
     #    plt.title('Queue Sizes')
         plt.xlabel('Time (ms)')
         plt.ylabel('Queue size (64B segments)')
-        plt.legend()
+        plt.legend(loc='upper left')
 

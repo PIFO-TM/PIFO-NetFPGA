@@ -30,23 +30,25 @@ from demo_utils.queue_stats import QueueStats
 # NUM_PKTS = 1500
 # RANK_OP = 0
 
-# round robin
-PCAP_FILE = 'sched_data/round-robin/pkts.pcap'
-INGRESS_LINK_RATE = 10 # Gbps
-EGRESS_LINK_RATE = 4 # Gbps
-NUM_PKTS = 1500
-RANK_OP = 1
-
-# # weighted round robin
-# PCAP_FILE = 'sched_data/weighted-round-robin/pkts.pcap'
+# # round robin
+# PCAP_FILE = 'sched_data/round-robin/pkts.pcap'
 # INGRESS_LINK_RATE = 10 # Gbps
 # EGRESS_LINK_RATE = 4 # Gbps
 # NUM_PKTS = 1500
-# RANK_OP = 2
+# RANK_OP = 1
+
+# weighted round robin
+PCAP_FILE = 'sched_data/weighted-round-robin/pkts.pcap'
+INGRESS_LINK_RATE = 10 # Gbps
+EGRESS_LINK_RATE = 4 # Gbps
+NUM_PKTS = 1500
+RANK_OP = 2
 
 # #### DEBUGGING ####
 # #PCAP_FILE = 'sched_data/debug/queue_1_pkts_1500.pcap'
-# PCAP_FILE = 'sched_data/debug/queues_2_3_pkts_1500.pcap'
+# #PCAP_FILE = 'sched_data/debug/queues_2_3_pkts_1500.pcap'
+# PCAP_FILE = 'sched_data/debug/rand_pkts.pcap'
+# #PCAP_FILE = 'sched_data/debug/pkts_inc_data_seq.pcap'
 # INGRESS_LINK_RATE = 10 # Gbps
 # EGRESS_LINK_RATE = 4 # Gbps
 # NUM_PKTS = 200
@@ -81,10 +83,11 @@ def reset_dut(dut):
     yield RisingEdge(dut.axis_aclk)
 
 def make_pkts_meta_in():
-    # read the pkts and rank values
+    global TEST_PKT
+    # read the pkts
     pkts_in = rdpcap(PCAP_FILE)
-
     pkts_in =  pkts_in[0:NUM_PKTS]
+
 #    rst_pkt = Ether(dst='08:11:11:11:11:08', src='ff:ff:ff:ff:ff:ff') / IP(src='10.0.0.2', dst='10.0.0.1') / TCP(sport=1) / ('\x00'*10)
 #    pkts_in.append(rst_pkt)
 #    final_pkt = Ether(dst='08:11:11:11:11:08', src='08:22:22:22:22:08') / IP(src='10.0.0.2', dst='10.0.0.1') / TCP(sport=1) / ('\x00'*10)
@@ -102,25 +105,36 @@ def make_pkts_meta_in():
     print 'len(pkts_in) = {}'.format(len(pkts_in))
     return pkts_in, meta_in
 
+def check_pkts(pkts_out):
+    pkts_exp = rdpcap(PCAP_FILE)
+    pkts_exp = pkts_exp[0:NUM_PKTS]
+
+    for p_out, p_exp, i in zip(pkts_out, pkts_exp, range(len(pkts_out))):
+        if p_out != p_exp:
+            print 'WARNING: unexpected pkt -- index: {} -- pkt_len: {}'.format(i, len(p_out))
+            p_out.show()
+            print ''
+
 def plot_stats(input_log_pkts, output_log_pkts, egress_link_rate):
+    start_time = input_log_pkts[0].time
     print "Calculating Input Rates ..."
-    input_stats = FlowStats(input_log_pkts, avg_interval=RATE_AVG_INTERVAL)
+    input_stats = FlowStats(input_log_pkts, start_time, avg_interval=RATE_AVG_INTERVAL)
     print "Calculating Output Rates ..."
-    output_stats = FlowStats(output_log_pkts, avg_interval=RATE_AVG_INTERVAL)
+    output_stats = FlowStats(output_log_pkts, start_time, avg_interval=RATE_AVG_INTERVAL)
     # create plots
     fig, axarr = plt.subplots(2)
     plt.sca(axarr[0])
-    input_stats.plot_rates('', linewidth=5)
+    input_stats.plot_rates('', ymax=12, linewidth=5)
     plt.ylabel('Input Rate (Gb/s)')
     plt.sca(axarr[1])
-    output_stats.plot_rates('', ymax=egress_link_rate+egress_link_rate*0.5, linewidth=5)
+    output_stats.plot_rates('', ymax=12, linewidth=5)
     plt.ylabel('Output Rate (Gb/s)')
 
     # plot queue sizes
-    in_queue_stats = QueueStats(input_log_pkts)
+    in_queue_stats = QueueStats(input_log_pkts, start_time)
     in_queue_stats.plot_queues()
     plt.title('Input Queue Sizes')
-    out_queue_stats = QueueStats(output_log_pkts)
+    out_queue_stats = QueueStats(output_log_pkts, start_time)
     out_queue_stats.plot_queues()
     plt.title('Output Queue Sizes')
 
@@ -165,6 +179,7 @@ def test_sched_alg_demo(dut):
 
     print 'len(pkts_in) = {}'.format(len(pkts_in))
     print 'len(pkts_out) = {}'.format(len(pkts_out))
+#    check_pkts(pkts_out)
 
     # Parse the logged pkts
     pkt_parser = LogPktParser()
