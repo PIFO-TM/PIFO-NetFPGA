@@ -4,6 +4,7 @@ import sys, os
 from scapy.all import *
 from packet_storage import Pkt_storage, Tuser
 from random import *
+from pifo_node import *
 
 def pad_pkt(pkt, size):
     if len(pkt) >= size:
@@ -13,7 +14,9 @@ def pad_pkt(pkt, size):
 
 def main():
     ps = Pkt_storage()
+    sl = SkipList()
     pkt_in_list = []
+    rank = 10
     for i in range(5):
         size = randint(64, 64)
         pkt = Ether(dst="08:11:11:11:11:08", src="08:22:22:22:22:08") / IP(src='10.0.0.2', dst='10.0.0.1') / TCP()
@@ -27,11 +30,15 @@ def main():
     for pkt, tuser in pkt_in_list:
         print "inserting: {}".format(pkt.summary())
         head_seg_ptr, meta_ptr = ps.insert(pkt, tuser)
+        sl.enqueue(rank, head_seg_ptr, meta_ptr)
         pkt_ptrs.append((head_seg_ptr, meta_ptr))
         print str(ps) + '\n'
 
     pkt_out_list = []
-    for head_seg_ptr, meta_ptr in pkt_ptrs:
+    while sl.numEntries > 0:
+        n = sl.dequeue()
+        head_seg_ptr = n.head_seg_ptr
+        meta_ptr = n.meta_ptr
         pkt, tuser = ps.remove(head_seg_ptr, meta_ptr)
         pkt_out_list.append((pkt, tuser))
         print str(ps) + '\n'

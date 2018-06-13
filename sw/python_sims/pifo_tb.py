@@ -24,7 +24,7 @@ class Pifo_tb(HW_sim_object):
     """The top level testbench for the PIFO
     """
 
-    def __init__(self, env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, enq_fifo_depth, rd_latency=1, wr_latency=1, sl_impl='det'):
+    def __init__(self, env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, enq_fifo_depth, rd_latency=1, wr_latency=1, sl_impl='det', outreg_latency=1):
         super(Pifo_tb, self).__init__(env, period)
 
         self.num_samples = num_samples
@@ -68,7 +68,7 @@ class Pifo_tb(HW_sim_object):
         self.deq_latencies = []
 
         # Instantiate the top-level Pifo
-        self.pifo = Pifo_top(env, period, self.pifo_pkt_in_pipe, self.pifo_pkt_out_pipe, self.pifo_enq_out_pipe, self.pifo_deq_in_pipe, MAX_SEGMENTS, MAX_PKTS, num_skipLists, outreg_width, enq_fifo_depth, rd_latency=rd_latency, wr_latency=wr_latency, sl_impl=sl_impl)
+        self.pifo = Pifo_top(env, period, self.pifo_pkt_in_pipe, self.pifo_pkt_out_pipe, self.pifo_enq_out_pipe, self.pifo_deq_in_pipe, MAX_SEGMENTS, MAX_PKTS, num_skipLists, outreg_width, enq_fifo_depth, rd_latency=rd_latency, wr_latency=wr_latency, sl_impl=sl_impl, outreg_latency=outreg_latency)
 
         # determine whether we want to gen/read pkts such that a constant fill level is maintained
         const_fill_level = True

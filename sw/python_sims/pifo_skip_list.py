@@ -12,12 +12,13 @@ VAL = 0
 LEFT = 5
 
 class SkipList(HW_sim_object):
-    def __init__(self, env, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency):
+    def __init__(self, env, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency, outreg_latency):
         super(SkipList, self).__init__(env, period)
 
         self.env = env
         self.period = period
         self.outreg_width = outreg_width
+        self.outreg_latency = outreg_latency
         self.enq_fifo_depth = enq_fifo_depth
         
         # Process communication pipes
@@ -43,7 +44,7 @@ class SkipList(HW_sim_object):
         # FIFO for free node list
         self.free_node_list = Fifo(size)
         # Output register on dequeue side
-        self.outreg = out_reg(self.env, period, self.outreg_ins_in_pipe, self.outreg_ins_out_pipe, self.outreg_rem_in_pipe, self.outreg_rem_out_pipe, outreg_width)
+        self.outreg = out_reg(self.env, period, self.outreg_ins_in_pipe, self.outreg_ins_out_pipe, self.outreg_rem_in_pipe, self.outreg_rem_out_pipe, outreg_width, outreg_latency)
         # FIFO for enqueing into the skip list
         self.enq_fifo = Fifo(enq_fifo_depth)
         

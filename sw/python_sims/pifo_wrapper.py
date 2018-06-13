@@ -9,7 +9,7 @@ from det_skip_list_simpy import SkipList as SkipList_det
 
 class SkipListWrapper(HW_sim_object):
     
-    def __init__(self, env, enq_in_pipe, enq_out_pipe, deq_in_pipe, deq_out_pipe, num_sl, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency, sl_impl):
+    def __init__(self, env, enq_in_pipe, enq_out_pipe, deq_in_pipe, deq_out_pipe, num_sl, period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency, sl_impl, outreg_latency):
         HW_sim_object.__init__(self, env, period)
         self.num_sl = num_sl
         self.enq_in_pipe = enq_in_pipe
@@ -22,9 +22,9 @@ class SkipListWrapper(HW_sim_object):
         
         for i in range(num_sl):
             if sl_impl == 'prob':
-                sl = SkipList_prob(env, self.period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency)
+                sl = SkipList_prob(env, self.period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency, outreg_latency)
             elif sl_impl == 'det':
-                sl = SkipList_det(env, self.period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency)
+                sl = SkipList_det(env, self.period, size, outreg_width, enq_fifo_depth, rd_latency, wr_latency, outreg_latency)
             else:
                 print >> sys.stderr, 'ERROR: unsupported skipList implementation type: {}'.format(sl_impl)
                 sys.exit(1)
@@ -47,7 +47,7 @@ class SkipListWrapper(HW_sim_object):
             sel_sl = None
             while sel_sl == None:
                 for i in range(self.num_sl):
-                    if (self.sl[i].busy == 0):
+                    if (self.sl[i].busy == 0 and self.sl[i].outreg.busy == 0):
                         if sel_sl == None:
                             sel_sl = i
                             min_num_entries = self.sl[i].num_entries

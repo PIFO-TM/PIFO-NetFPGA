@@ -269,7 +269,7 @@ class AXI_S_slave(HW_sim_object):
 
 
 class out_reg(HW_sim_object):
-    def __init__(self, env, period, ins_in_pipe, ins_out_pipe, rem_in_pipe, rem_out_pipe, width=16):
+    def __init__(self, env, period, ins_in_pipe, ins_out_pipe, rem_in_pipe, rem_out_pipe, width=16, latency=1):
         super(out_reg, self).__init__(env, period)
         self.val = width*[None]
         self.ptrs = width*[None]
@@ -278,6 +278,7 @@ class out_reg(HW_sim_object):
         self.rem_in_pipe = rem_in_pipe
         self.rem_out_pipe = rem_out_pipe
         self.width = width
+        self.latency = latency
         self.num_entries = 0
         self.next = -1
         self.next_valid = 0
@@ -296,7 +297,8 @@ class out_reg(HW_sim_object):
             (val, ptrs) = yield self.ins_in_pipe.get()
             self.busy = 1
             self.next_valid = 0
-            yield self.wait_clock()
+            for i in range(self.latency):
+                yield self.wait_clock()
             # Room available in register, just add the entry to the register
             if self.num_entries < self.width:
                 self.val[self.num_entries] = val
@@ -332,6 +334,8 @@ class out_reg(HW_sim_object):
             yield self.rem_in_pipe.get()
             self.busy = 1
             self.next_valid = 0
+#            for i in range(self.latency):
+#                yield self.wait_clock()
             yield self.wait_clock()
             # Find min value in register
             min_idx = self.val.index(min(self.val[:self.num_entries]))

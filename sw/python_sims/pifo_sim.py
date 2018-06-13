@@ -37,16 +37,27 @@ class Pifo_sim(object):
                 results.append(sim_res)
             self.plot_results(levels, results, 'fill_level', 'lower right', 'nodes', impl)
 
-    def test_num_skipLists(self, level, pkt_len, num_skipLists, outreg_width, enq_fifo_depth, sl_impls):
+    def test_num_skipLists(self, level, pkt_len, num_skipLists, outreg_width, enq_fifo_depth, sl_impls, outreg_latency):
         print 'testing num_skipLists...'
         for impl in sl_impls:
             results = []
             for num_sl in num_skipLists:
-                sim_res = self.run_sim(level, pkt_len, num_sl, outreg_width=outreg_width, enq_fifo_depth=enq_fifo_depth, sl_impl=impl)
+                sim_res = self.run_sim(level, pkt_len, num_sl, outreg_width=outreg_width, enq_fifo_depth=enq_fifo_depth, sl_impl=impl, outreg_latency=outreg_latency)
                 print 'finished sim for num_sl = {}'.format(num_sl)
                 results.append(sim_res)
             print 'impl = {}, enq_avg = {}, deq_avg = {}'.format(impl, [r.enq_avg for r in results], [r.deq_avg for r in results])
             self.plot_results(num_skipLists, results, 'num_skip_lists', 'upper right', '', impl)
+
+    def test_outreg_latency(self, level, pkt_len, num_skipLists, outreg_width, enq_fifo_depth, sl_impls, outreg_latencies):
+        print 'testing outreg_latency...'
+        for impl in sl_impls:
+            results = []
+            for outreg_latency in outreg_latencies:
+                sim_res = self.run_sim(level, pkt_len, num_skipLists, outreg_width=outreg_width, enq_fifo_depth=enq_fifo_depth, sl_impl=impl, outreg_latency=outreg_latency)
+                print 'finished sim for outreg_latency = {}'.format(outreg_latency)
+                results.append(sim_res)
+            print 'impl = {}, enq_avg = {}, deq_avg = {}'.format(impl, [r.enq_avg for r in results], [r.deq_avg for r in results])
+            self.plot_results(outreg_latencies, results, 'outreg_latency', 'lower right', 'cycles', impl)
 
     def test_pkt_len(self, level, pkt_lens, num_skipLists, sl_impls):
         print 'testing pkt_len...'
@@ -78,12 +89,12 @@ class Pifo_sim(object):
                 results.append(sim_res)
             self.plot_results(outreg_widths, results, 'outreg_width', 'upper right', 'nodes', impl)
 
-    def run_sim(self, fill_level, pkt_len, num_skipLists, num_samples=100, outreg_width=1, enq_fifo_depth=1, rd_latency=1, wr_latency=1, sl_impl='det'):
+    def run_sim(self, fill_level, pkt_len, num_skipLists, num_samples=100, outreg_width=1, enq_fifo_depth=1, rd_latency=1, wr_latency=1, sl_impl='det', outreg_latency=1):
         env = simpy.Environment()
         period = 1
         snd_rate = 1 # not currently used
         # instantiate the testbench
-        ps_tb = Pifo_tb(env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, enq_fifo_depth, rd_latency, wr_latency, sl_impl)
+        ps_tb = Pifo_tb(env, period, snd_rate, fill_level, pkt_len, num_skipLists, num_samples, outreg_width, enq_fifo_depth, rd_latency, wr_latency, sl_impl, outreg_latency)
         # run the simulation
         env.run()
         # collect the results
