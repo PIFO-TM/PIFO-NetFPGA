@@ -27,8 +27,11 @@
 // @NETFPGA_LICENSE_HEADER_END@
 //
 
-table_cam_add_entry forward set_output_port 0b00000100 => 0b00000001
-table_cam_add_entry forward set_output_port 0b00000001 => 0b00000100
+table_cam_add_entry forward set_output_port 0x081111111108 => 0b00000001
+table_cam_add_entry forward set_output_port 0x082222222208 => 0b00000100
 
-table_cam_add_entry check_reset mark_reset 0xffffffffffff =>
+table_cam_add_entry flow_len_table set_flow_len 0x00 => 0
+
+table_tcam_add_entry log_pkt_table 0 log_pkt 0b00000001/0b00000001 =>
+table_tcam_add_entry log_pkt_table 1 log_pkt 0b00000010/0b00000010 =>
 

@@ -38,10 +38,9 @@ typedef bit<8> port_t;
 
 /* standard sume switch metadata */
 struct sume_metadata_t {
-    bit<32> unused;
-    bit<8> rank_rst;
-    bit<8> flow_weight;
-    bit<16> flow_id;
+    bit<40> unused;
+    bit<8> log_pkt;
+    bit<16> srpt_rank;
     bit<8> rank_op;
     bit<8> q_id;
     bit<16> bp_count;

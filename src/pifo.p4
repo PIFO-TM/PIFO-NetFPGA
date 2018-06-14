@@ -42,6 +42,9 @@ typedef bit<32> IPv4Addr_t;
 #define IPV4_TYPE 0x0800
 #define TCP_TYPE 6
 
+#define SYN_MASK 8w0b0000_0010
+#define SYN_POS 1
+
 #define REG_READ 8w0
 #define REG_WRITE 8w1
 
@@ -69,15 +72,15 @@ extern void rank_op_reg_rw(in bit<1> index,
                            in bit<8> opCode,
                            out bit<8> result);
 
-#define L2_MAX_NUM_FLOWS 2
-
-// rank_op register
+#define L2_NUM_FLOWS 10
+// init_seqNo register
 @Xilinx_MaxLatency(16)
-@Xilinx_ControlWidth(L2_MAX_NUM_FLOWS)
-extern void flow_weight_reg_rw(in bit<L2_MAX_NUM_FLOWS> index,
-                               in bit<8> newVal,
-                               in bit<8> opCode,
-                               out bit<8> result);
+@Xilinx_ControlWidth(L2_NUM_FLOWS)
+extern void init_seqNo_reg_rw(in bit<L2_NUM_FLOWS> index,
+                              in bit<32> newVal,
+                              in bit<8> opCode,
+                              out bit<32> result);
+
 
 #define MAX_NUM_QUEUES 4
 
@@ -180,7 +183,7 @@ control TopPipe(inout Parsed_packet p,
     }
 
     table forward {
-        key = { sume_metadata.src_port: exact; }
+        key = { p.ethernet.dstAddr: exact; }
 
         actions = {
             set_output_port;
@@ -190,59 +193,124 @@ control TopPipe(inout Parsed_packet p,
         default_action = NoAction;
     }
 
-    action mark_reset() {
-        sume_metadata.rank_rst = 1;
+
+    bit<32> flow_len;
+    action set_flow_len(bit<32> len) {
+        flow_len = len;
     }
 
-    table check_reset {
-        key = { p.ethernet.srcAddr: exact; }
+    // flow_len_table: used to map IP tos field to flow length
+    table flow_len_table {
+        key = { p.ip.tos: exact; }
 
         actions = {
-            mark_reset;
+            set_flow_len;
             NoAction;
         }
         size = 64;
         default_action = NoAction;
     }
 
+    action log_pkt() {
+        sume_metadata.log_pkt = 1;
+    }
+
+    // log_pkt_table: used to check if pkt should be logged
+    table log_pkt_table {
+        key = { p.tcp.flags: ternary; }
+
+        actions = {
+            log_pkt;
+            NoAction;
+        }
+        size = 63;
+        default_action = NoAction;
+    }
+
+    action set_q_id(bit<8> q_id) {
+        sume_metadata.q_id = q_id;
+    }
+
+    action set_default_q_id() {
+        sume_metadata.q_id = 0;
+    }
+
+    // lookup_queue_id: used to map rank value to queue ID
+    table lookup_queue_id {
+        key = { sume_metadata.srpt_rank: ternary; }
+
+        actions = {
+            set_q_id;
+            set_default_q_id;
+        }
+        size = 63;
+        default_action = set_default_q_id;
+    }
+
 
     apply {
         forward.apply();
 
+        // set bp_count field
+        bp_count_reg_rw(0, 0, REG_READ, sume_metadata.bp_count);
+
+        // check if we should log this packet
         if (p.tcp.isValid()) {
-            // set bp_count field
-            bp_count_reg_rw(0, 0, REG_READ, sume_metadata.bp_count);
+            log_pkt_table.apply();
+        }
 
-            bit<16> flow_offset;
-            flow_offset_reg_rw(0, 0, REG_READ, flow_offset);
-            
-            bit<16> flow_id = p.tcp.srcPort - flow_offset;
-            if (flow_id >= (16w1 << L2_MAX_NUM_FLOWS)) {
-                flow_id = 0;
-            }
-            // set flow_id field
-            sume_metadata.flow_id = flow_id;
-            // set q_id field
-            if (flow_id[7:0] >= MAX_NUM_QUEUES) {
-                sume_metadata.q_id = 0;
+        if (sume_metadata.dst_port[0] == 1 && p.tcp.isValid()) {
+            // headed to nf0 so perform rank computation
+
+            // get flowID
+            bit<16> flowOffset;
+            flow_offset_reg_rw(0, 0, REG_READ, flowOffset);
+            bit<16> dport_diff = p.tcp.dstPort - flowOffset;
+            bit<L2_NUM_FLOWS> flowID = dport_diff[L2_NUM_FLOWS-1:0];
+
+            bit<32> newVal,
+            bit<8> opCode,
+            // access the init_seqNo register
+            if ((p.tcp.flags & SYN_MASK) >> SYN_POS == 1) {
+                newVal = p.tcp.seqNo;
+                opCode = REG_WRITE;
             } else {
-                sume_metadata.q_id = flow_id[7:0];
+                newVal = 0; // unused
+                opCode = REG_READ;
+            }
+            bit<32> init_seqNo;
+            init_seqNo_reg_rw(flowID, newVal, opCode, init_seqNo);
+
+
+            // compute srpt rank
+            if ((p.tcp.flags & SYN_MASK) >> SYN_POS == 0) { 
+                // not a SYN packet
+
+                // lookup flow size
+                flow_len_table.apply();
+
+                bit<32> bytes_sent = p.tcp.seqNo - init_seqNo;
+    
+                // compute srpt rank
+                if (flow_len > bytes_sent) {
+                    bit<32> bytes_remaining = flow_len - bytes_sent;
+                    sume_metadata.srpt_rank = bytes_remaining[21:6]; // increments of 2^6 = 64B
+                } else {
+                    sume_metadata.srpt_rank = 0;
+                }
+            }
+            else {
+                // not a SYN packet
+                sume_metadata.srpt_rank = 0;
             }
 
-            // set rank_op field
-            rank_op_reg_rw(0, 0, REG_READ, sume_metadata.rank_op);
+            // lookup queue id
+            lookup_queue_id.apply();
 
-            // set flow_weight field
-            flow_weight_reg_rw(flow_id[L2_MAX_NUM_FLOWS-1:0], 0, REG_READ, sume_metadata.flow_weight);
-
-            // reset rank computation state if needed
-            check_reset.apply();
-        } else {
-            sume_metadata.bp_count = 0;
-            sume_metadata.flow_id = 0;
-            sume_metadata.q_id = 0;
-            sume_metadata.rank_op = 0;
-            sume_metadata.flow_weight = 0;
+        }
+        else {
+            // not headed to nf0
+            sume_metadata.srpt_rank = 0;
         }
 
     }
