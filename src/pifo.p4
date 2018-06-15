@@ -72,7 +72,7 @@ extern void rank_op_reg_rw(in bit<1> index,
                            in bit<8> opCode,
                            out bit<8> result);
 
-#define L2_NUM_FLOWS 10
+#define L2_NUM_FLOWS 9
 // init_seqNo register
 @Xilinx_MaxLatency(16)
 @Xilinx_ControlWidth(L2_NUM_FLOWS)
