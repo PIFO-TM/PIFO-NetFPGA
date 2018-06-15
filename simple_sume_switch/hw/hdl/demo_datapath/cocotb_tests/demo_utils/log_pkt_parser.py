@@ -10,14 +10,15 @@ Description: Parses the logged pkts
 """
 
 class LogPkt():
-    def __init__(self, flowID, length, time, qsizes):
+    def __init__(self, flowID, length, time, rank, qsizes):
         self.flowID = flowID
         self.length = length
         self.time = time*5 # convert to ns
+        self.rank = rank
         self.qsizes = qsizes
 
     def __str__(self):
-        return 'flowID = {0: <4}, length = {1: <4}, time = {2: <6}, qsizes = {3}'.format(self.flowID, self.length, self.time, self.qsizes)
+        return 'flowID = {0: <4}, length = {1: <4}, time = {2: <6}, rank = {3: <6}, qsizes = {4}'.format(self.flowID, self.length, self.time, self.rank, self.qsizes)
 
 class LogPktParser(object):
 
@@ -52,12 +53,13 @@ class LogPktParser(object):
             qsize_0 = struct.unpack("<H", pkt[48:50])[0]
             qsize_1 = struct.unpack("<H", pkt[50:52])[0]
             qsize_2 = struct.unpack("<H", pkt[52:54])[0]
-            qsize_3 = struct.unpack("<H", pkt[54:56])[0]
+            rank = struct.unpack("<H", pkt[54:56])[0]
             timestamp = struct.unpack("<Q", pkt[56:64])[0]
-            flowID = src_port
-            return LogPkt(flowID, ip_len+14, timestamp, [qsize_0, qsize_1, qsize_2, qsize_3])
+            flowID = dst_port
+            return LogPkt(flowID, ip_len+14, timestamp, rank, [qsize_0, qsize_1, qsize_2])
         except struct.error as e:
-            print >> sys.stderr, "WARNING: could not unpack packet to obtain all fields"
+            print >> sys.stderr, "WARNING: could not unpack packet to obtain all fields, len(pkt) = {}".format(len(pkt))
+            print e
             return None
         except socket.error as e:
             print >> sys.stderr, "WARNING: packed IP wrong length for inet_ntoa"
