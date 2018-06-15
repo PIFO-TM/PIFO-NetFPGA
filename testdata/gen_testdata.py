@@ -103,60 +103,87 @@ def write_pcap_files():
 # generate testdata #
 #####################
 
-sport = 1
-pkt = Ether(dst='08:11:11:11:11:08', src='08:22:22:22:22:08') / IP(src='10.0.0.2', dst='10.0.0.1') / TCP(sport=sport)
-pkt = pad_pkt(pkt, 1500)
+def lookup_q_id(rank):
+    if rank < (1 << 6):
+        return 0
+    elif rank < (1 << 11):
+        return 1
+    elif rank < (1 << 16):
+        return 2
+    else:
+        return 0
 
-for i in range(4):
-    sport = 1
-    pkt1 = pkt.copy()
-    pkt1.sport = sport
-    applyPkt(pkt1, 'nf0')
-    sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
-    sss_sdnet_tuples.sume_tuple_expect['flow_id'] = sport
-    sss_sdnet_tuples.sume_tuple_expect['q_id'] = sport
-    sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
-    sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
-    sss_sdnet_tuples.sume_tuple_expect['rank_rst'] = 0
-    expPkt(pkt1, 'nf1')
-    
-    sport = 2
-    pkt2 = pkt.copy()
-    pkt2.sport = sport
-    applyPkt(pkt2, 'nf0')
-    sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
-    sss_sdnet_tuples.sume_tuple_expect['flow_id'] = sport
-    sss_sdnet_tuples.sume_tuple_expect['q_id'] = sport
-    sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
-    sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
-    sss_sdnet_tuples.sume_tuple_expect['rank_rst'] = 0
-    expPkt(pkt2, 'nf1')
+dport = 1
+init_seqNo = 12345
+tos = 0x08
+nf_MAC_map = {'nf0': '08:11:11:11:11:08', 'nf1': '08:22:22:22:22:08'}
+nf_IP_map = {'nf0': '10.0.0.1', 'nf1': '10.0.0.2'}
+tos_len_map = {0x08: 1000000}
 
-pkt3 = pkt.copy()
-pkt3[Ether].src = 'ff:ff:ff:ff:ff:ff'
-applyPkt(pkt3, 'nf0')
+# Test 1: SYN packet, towards nf0, dport=1, seqNo = 12345, tos=0x08 (1MB),
+#   Expected: srpt_rank = 0, dst_port = nf0, log_pkt = 1
+pkt = Ether(dst=nf_MAC_map['nf0'], src=nf_MAC_map['nf1']) / IP(tos=tos, src=nf_IP_map['nf1'], dst=nf_IP_map['nf0']) / TCP(dport=dport, seq=init_seqNo, flags='S')
+pkt = pad_pkt(pkt, 64)
+applyPkt(pkt, 'nf1')
 sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
-sss_sdnet_tuples.sume_tuple_expect['flow_id'] = 1
-sss_sdnet_tuples.sume_tuple_expect['q_id'] = 1
 sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
-sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
-sss_sdnet_tuples.sume_tuple_expect['rank_rst'] = 1
-expPkt(pkt3, 'nf1')
+srpt_rank = 0
+sss_sdnet_tuples.sume_tuple_expect['srpt_rank'] = srpt_rank
+sss_sdnet_tuples.sume_tuple_expect['q_id'] = lookup_q_id(srpt_rank)
+sss_sdnet_tuples.sume_tuple_expect['log_pkt'] = 1
+expPkt(pkt, 'nf0')
 
-sport = 4
-pkt4 = pkt.copy()
-pkt4.sport = sport
-applyPkt(pkt4, 'nf0')
+# Test 2: ACK packet, towards nf0, dport=1, seqNo = 12345 + 1024, tos=0x08 (1MB) 
+#   Expected: srpt_rank = (1000000 - 1024) >> 6, dst_port = nf0, log_pkt = 0
+pkt = Ether(dst=nf_MAC_map['nf0'], src=nf_MAC_map['nf1']) / IP(tos=tos, src=nf_IP_map['nf1'], dst=nf_IP_map['nf0']) / TCP(dport=dport, seq=init_seqNo+1024, flags='A')
+pkt = pad_pkt(pkt, 1024)
+applyPkt(pkt, 'nf1')
 sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
-sss_sdnet_tuples.sume_tuple_expect['flow_id'] = 0
-sss_sdnet_tuples.sume_tuple_expect['q_id'] = 0
 sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
-sss_sdnet_tuples.sume_tuple_expect['flow_weight'] = 0
-sss_sdnet_tuples.sume_tuple_expect['rank_rst'] = 0
-expPkt(pkt4, 'nf1')
+srpt_rank = (tos_len_map[tos] - 1024) >> 16
+sss_sdnet_tuples.sume_tuple_expect['srpt_rank'] = srpt_rank
+sss_sdnet_tuples.sume_tuple_expect['q_id'] = lookup_q_id(srpt_rank)
+sss_sdnet_tuples.sume_tuple_expect['log_pkt'] = 0
+expPkt(pkt, 'nf0')
 
+# Test 3: SYN packet, towards nf1, dport=1, seqNo = 54321, tos=0x08 (1MB) 
+#   Expected: srpt_rank = 0, dst_port = nf1, log_pkt = 1
+pkt = Ether(dst=nf_MAC_map['nf1'], src=nf_MAC_map['nf0']) / IP(tos=tos, src=nf_IP_map['nf0'], dst=nf_IP_map['nf1']) / TCP(dport=dport, seq=54321, flags='S')
+pkt = pad_pkt(pkt, 64)
+applyPkt(pkt, 'nf0')
+sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
+sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
+srpt_rank = 0
+sss_sdnet_tuples.sume_tuple_expect['srpt_rank'] = srpt_rank
+sss_sdnet_tuples.sume_tuple_expect['q_id'] = lookup_q_id(srpt_rank)
+sss_sdnet_tuples.sume_tuple_expect['log_pkt'] = 1
+expPkt(pkt, 'nf1')
 
+# Test 4: ACK packet, towards nf0, dport=1, seqNo = 12345 + 2048, tos=0x08 (1MB)
+#   Expected: srpt_rank = (1000000 - 2048) >> 6, dst_port = nf0, log_pkt = 0
+pkt = Ether(dst=nf_MAC_map['nf0'], src=nf_MAC_map['nf1']) / IP(tos=tos, src=nf_IP_map['nf1'], dst=nf_IP_map['nf0']) / TCP(dport=dport, seq=init_seqNo+900000, flags='A')
+pkt = pad_pkt(pkt, 1024)
+applyPkt(pkt, 'nf1')
+sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
+sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
+srpt_rank = (tos_len_map[tos] - 900000) >> 16
+sss_sdnet_tuples.sume_tuple_expect['srpt_rank'] = srpt_rank
+sss_sdnet_tuples.sume_tuple_expect['q_id'] = lookup_q_id(srpt_rank)
+sss_sdnet_tuples.sume_tuple_expect['log_pkt'] = 0
+expPkt(pkt, 'nf0')
 
+# Test 5: FIN packet, towards nf0, dport=1, seqNo = 12345 + 3072, tos=0x08 (1MB)
+#   Expected: srpt_rank = (1000000 = 3072) >> 6, dst_port = nf0, log_pkt = 1
+pkt = Ether(dst=nf_MAC_map['nf0'], src=nf_MAC_map['nf1']) / IP(tos=tos, src=nf_IP_map['nf1'], dst=nf_IP_map['nf0']) / TCP(dport=dport, seq=init_seqNo+997000, flags='F')
+pkt = pad_pkt(pkt, 1024)
+applyPkt(pkt, 'nf1')
+sss_sdnet_tuples.sume_tuple_expect['bp_count'] = 0
+sss_sdnet_tuples.sume_tuple_expect['rank_op'] = 0
+srpt_rank = (tos_len_map[tos] - 997000) >> 16
+sss_sdnet_tuples.sume_tuple_expect['srpt_rank'] = srpt_rank
+sss_sdnet_tuples.sume_tuple_expect['q_id'] = lookup_q_id(srpt_rank)
+sss_sdnet_tuples.sume_tuple_expect['log_pkt'] = 1
+expPkt(pkt, 'nf0')
 
 write_pcap_files()
 

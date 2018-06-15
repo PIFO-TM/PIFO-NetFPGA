@@ -1,5 +1,7 @@
+#!/usr/bin/env python
+
 #
-# Copyright (c) 2017 Stephen Ibanez
+# Copyright (c) 2018 Stephen Ibanez
 # All rights reserved.
 #
 # This software was developed by Stanford University and the University of Cambridge Computer Laboratory 
@@ -27,14 +29,18 @@
 # @NETFPGA_LICENSE_HEADER_END@
 #
 
+from scapy.all import *
 
-# Makefile to convert the P4 into PX and P4 commands into SDNet tables
+TUPLE_IN_FILE = 'Tuple_in.txt'
+#PCAP_FILE = 'iperf-traces/iperf3-10MB-dport1-trim.pcap'
+PCAP_FILE = 'iperf-traces/iperf3-20MB-dport2-trim.pcap'
 
-all:
-	p4c-sdnet -o ${P4_PROJECT_NAME}.sdnet --sdnet_info .sdnet_switch_info.dat ${P4_PROJECT_NAME}.p4
-	${SUME_SDNET}/bin/p4_px_tables.py commands.txt .sdnet_switch_info.dat
-#	${SUME_SDNET}/bin/p4_px_tables.py commands_iperf.txt .sdnet_switch_info.dat
+# read pcap file
+pkts = rdpcap(PCAP_FILE)
 
-clean:
-	rm -f *.sdnet *.tbl .sdnet_switch_info.dat
+with open(TUPLE_IN_FILE, 'w') as f:
+    for p in pkts:
+        f.write('{0:032x}\n'.format(len(p)))
+
+wrpcap('src.pcap', pkts)
 

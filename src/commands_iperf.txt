@@ -27,10 +27,11 @@
 // @NETFPGA_LICENSE_HEADER_END@
 //
 
-table_cam_add_entry forward set_output_port 0x081111111108 => 0b00000001
-table_cam_add_entry forward set_output_port 0x082222222208 => 0b00000100
+table_cam_add_entry forward set_output_port 0x000f530e0cb0 => 0b00000001
+table_cam_add_entry forward set_output_port 0x000f530d0bcc => 0b00000100
 
-table_cam_add_entry flow_len_table set_flow_len 0x08 => 1000000
+table_cam_add_entry flow_len_table set_flow_len 0x08 => 10000000
+table_cam_add_entry flow_len_table set_flow_len 0x0c => 20000000
 
 table_tcam_add_entry log_pkt_table 0 log_pkt 0b00000001/0b00000001 =>
 table_tcam_add_entry log_pkt_table 1 log_pkt 0b00000010/0b00000010 =>
@@ -39,8 +40,8 @@ table_tcam_add_entry lookup_queue_id 0 set_q_id 0b0000000000000001/0b11111111111
 table_tcam_add_entry lookup_queue_id 1 set_q_id 0b0000000000000010/0b1111111111111110 => 0
 table_tcam_add_entry lookup_queue_id 2 set_q_id 0b0000000000000100/0b1111111111111100 => 0
 table_tcam_add_entry lookup_queue_id 3 set_q_id 0b0000000000001000/0b1111111111111000 => 0
-table_tcam_add_entry lookup_queue_id 4 set_q_id 0b0000000000010000/0b1111111111110000 => 0
-table_tcam_add_entry lookup_queue_id 5 set_q_id 0b0000000000100000/0b1111111111100000 => 0
+table_tcam_add_entry lookup_queue_id 4 set_q_id 0b0000000000010000/0b1111111111110000 => 1
+table_tcam_add_entry lookup_queue_id 5 set_q_id 0b0000000000100000/0b1111111111100000 => 1
 table_tcam_add_entry lookup_queue_id 6 set_q_id 0b0000000001000000/0b1111111111000000 => 1
 table_tcam_add_entry lookup_queue_id 7 set_q_id 0b0000000010000000/0b1111111110000000 => 1
 table_tcam_add_entry lookup_queue_id 8 set_q_id 0b0000000100000000/0b1111111100000000 => 1

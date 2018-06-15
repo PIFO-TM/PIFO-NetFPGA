@@ -82,8 +82,6 @@ extern void init_seqNo_reg_rw(in bit<L2_NUM_FLOWS> index,
                               out bit<32> result);
 
 
-#define MAX_NUM_QUEUES 4
-
 // standard Ethernet header
 header Ethernet_h { 
     EthAddr_t dstAddr; 
@@ -199,16 +197,20 @@ control TopPipe(inout Parsed_packet p,
         flow_len = len;
     }
 
+    action set_default_flow_len() {
+        flow_len = 0;
+    }
+
     // flow_len_table: used to map IP tos field to flow length
     table flow_len_table {
         key = { p.ip.tos: exact; }
 
         actions = {
             set_flow_len;
-            NoAction;
+            set_default_flow_len;
         }
         size = 64;
-        default_action = NoAction;
+        default_action = set_default_flow_len;
     }
 
     action log_pkt() {
@@ -259,7 +261,7 @@ control TopPipe(inout Parsed_packet p,
             log_pkt_table.apply();
         }
 
-        if (sume_metadata.dst_port[0] == 1 && p.tcp.isValid()) {
+        if (sume_metadata.dst_port[0:0] == 1 && p.tcp.isValid()) {
             // headed to nf0 so perform rank computation
 
             // get flowID
@@ -268,8 +270,8 @@ control TopPipe(inout Parsed_packet p,
             bit<16> dport_diff = p.tcp.dstPort - flowOffset;
             bit<L2_NUM_FLOWS> flowID = dport_diff[L2_NUM_FLOWS-1:0];
 
-            bit<32> newVal,
-            bit<8> opCode,
+            bit<32> newVal;
+            bit<8> opCode;
             // access the init_seqNo register
             if ((p.tcp.flags & SYN_MASK) >> SYN_POS == 1) {
                 newVal = p.tcp.seqNo;
@@ -294,7 +296,7 @@ control TopPipe(inout Parsed_packet p,
                 // compute srpt rank
                 if (flow_len > bytes_sent) {
                     bit<32> bytes_remaining = flow_len - bytes_sent;
-                    sume_metadata.srpt_rank = bytes_remaining[21:6]; // increments of 2^6 = 64B
+                    sume_metadata.srpt_rank = bytes_remaining[31:16]; // increments of 2^16 = 64KB
                 } else {
                     sume_metadata.srpt_rank = 0;
                 }
