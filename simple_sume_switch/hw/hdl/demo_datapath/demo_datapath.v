@@ -60,21 +60,17 @@ module demo_datapath
     parameter Q_ID_WIDTH           = 8,
     parameter RANK_OP_POS          = Q_ID_POS+Q_ID_WIDTH,
     parameter RANK_OP_WIDTH        = 8,
-    parameter FLOW_ID_POS          = RANK_OP_POS+RANK_OP_WIDTH,
-    parameter FLOW_ID_WIDTH        = 16,
-    parameter FLOW_WEIGHT_POS      = FLOW_ID_POS+FLOW_ID_WIDTH,
-    parameter FLOW_WEIGHT_WIDTH    = 8,
-    parameter RANK_RST_POS         = FLOW_WEIGHT_POS+FLOW_WEIGHT_WIDTH,
-    parameter RANK_RST_WIDTH       = 8,
-
-    parameter MAX_NUM_FLOWS        = 4,
+    parameter SRPT_RANK_POS        = RANK_OP_POS+RANK_OP_WIDTH,
+    parameter SRPT_RANK_WIDTH      = 16,
+    parameter LOG_PKT_POS          = SRPT_RANK_POS+SRPT_RANK_WIDTH,
+    parameter LOG_PKT_WIDTH         = 8,
 
     // max num pkts the pifo can store
     parameter PIFO_DEPTH = 4096,
     parameter PIFO_REG_DEPTH = 16,
     parameter STORAGE_MAX_PKTS = 2048,
     parameter NUM_SKIP_LISTS = 8,
-    parameter NUM_QUEUES =  4
+    parameter NUM_QUEUES =  3
 )
 (
     // Global Ports
@@ -123,6 +119,14 @@ module demo_datapath
 
 );
 
+   // ------------- localparams ---------------
+
+   localparam Q_SIZE_BITS = 16;
+
+   localparam IDLE          = 0;
+   localparam FINISH_PKT    = 1;
+   localparam L2_NUM_STATES = 1;
+
    // ------------- wires ---------------
 
    wire [C_S_AXIS_DATA_WIDTH - 1:0]              tm_m_axis_tdata;
@@ -139,15 +143,20 @@ module demo_datapath
    wire                                          rl_m_axis_tready;
    wire                                          rl_m_axis_tlast;
 
-   localparam Q_SIZE_BITS = 16;
+   reg [L2_NUM_STATES-1:0] tm_state, tm_state_next;
+   reg s_axis_tm_tvalid;
+
+   reg [L2_NUM_STATES-1:0] log_state, log_state_next;
+   reg s_axis_log_tvalid;
 
    wire [Q_SIZE_BITS-1:0]   qsize_0;
    wire [Q_SIZE_BITS-1:0]   qsize_1;
    wire [Q_SIZE_BITS-1:0]   qsize_2;
-   wire [Q_SIZE_BITS-1:0]   qsize_3;
 
    // ------------- Modules ---------------
 
+   // slave interface  - top level slave interface
+   // master interface - rate limiter slave interface
    simple_rank_tm
    #(
        .BP_COUNT_POS      (BP_COUNT_POS), 
@@ -156,14 +165,9 @@ module demo_datapath
        .Q_ID_WIDTH        (Q_ID_WIDTH), 
        .RANK_OP_POS       (RANK_OP_POS), 
        .RANK_OP_WIDTH     (RANK_OP_WIDTH), 
-       .FLOW_ID_POS       (FLOW_ID_POS), 
-       .FLOW_ID_WIDTH     (FLOW_ID_WIDTH), 
-       .FLOW_WEIGHT_POS   (FLOW_WEIGHT_POS), 
-       .FLOW_WEIGHT_WIDTH (FLOW_WEIGHT_WIDTH),
-       .RANK_RST_POS      (RANK_RST_POS), 
-       .RANK_RST_WIDTH    (RANK_RST_WIDTH),
+       .SRPT_RANK_POS     (SRPT_RANK_POS), 
+       .SRPT_RANK_WIDTH   (SRPT_RANK_WIDTH),
 
-       .MAX_NUM_FLOWS     (MAX_NUM_FLOWS),
        .PIFO_DEPTH       (PIFO_DEPTH),
        .PIFO_REG_DEPTH   (PIFO_REG_DEPTH),
        .STORAGE_MAX_PKTS (STORAGE_MAX_PKTS),
@@ -187,16 +191,18 @@ module demo_datapath
        .s_axis_tdata  (s_axis_tdata),
        .s_axis_tkeep  (s_axis_tkeep),
        .s_axis_tuser  (s_axis_tuser),
-       .s_axis_tvalid (s_axis_tvalid),
+       .s_axis_tvalid (s_axis_tm_tvalid), // only accept pkts towards nf0
        .s_axis_tready (s_axis_tready),
        .s_axis_tlast  (s_axis_tlast),
        // queue size info
        .qsize_0       (qsize_0),
        .qsize_1       (qsize_1),
-       .qsize_2       (qsize_2),
-       .qsize_3       (qsize_3)
+       .qsize_2       (qsize_2)
    );
 
+   // slave interface  - simple_tm master interface
+   // master interface - top level nf0 interface
+   // TODO: need to add a packet aggregation module after this?
    rate_limiter
    #(
        .BP_COUNT_POS   (BP_COUNT_POS),
@@ -208,12 +214,12 @@ module demo_datapath
        .axis_aclk (axis_aclk),
        .axis_resetn (axis_resetn),
        // pkt_storage output pkts
-       .m_axis_tdata  (rl_m_axis_tdata),
-       .m_axis_tkeep  (rl_m_axis_tkeep),
-       .m_axis_tuser  (rl_m_axis_tuser),
-       .m_axis_tvalid (rl_m_axis_tvalid),
-       .m_axis_tready (rl_m_axis_tready),
-       .m_axis_tlast  (rl_m_axis_tlast),
+       .m_axis_tdata (nf0_m_axis_tdata),
+       .m_axis_tkeep (nf0_m_axis_tkeep),
+       .m_axis_tuser (nf0_m_axis_tuser),
+       .m_axis_tvalid(nf0_m_axis_tvalid),
+       .m_axis_tready(nf0_m_axis_tready),
+       .m_axis_tlast (nf0_m_axis_tlast),
        // pkt_storage input pkts
        .s_axis_tdata  (tm_m_axis_tdata),
        .s_axis_tkeep  (tm_m_axis_tkeep),
@@ -223,7 +229,9 @@ module demo_datapath
        .s_axis_tlast  (tm_m_axis_tlast)
    );
 
-   //Output queues
+   // Output queues
+   // slave interface  - top level slave interface
+   // master interface - top level nf1 and nf2 interfaces
     simple_output_queues
     #(
         .DST_PORT_POS(DST_PORT_POS)
@@ -232,29 +240,35 @@ module demo_datapath
     (
         .axis_aclk(axis_aclk),
         .axis_resetn(axis_resetn),
-        .s_axis_tdata   (rl_m_axis_tdata),
-        .s_axis_tkeep   (rl_m_axis_tkeep),
-        .s_axis_tuser   (rl_m_axis_tuser),
-        .s_axis_tvalid  (rl_m_axis_tvalid),
-        .s_axis_tready  (rl_m_axis_tready),
-        .s_axis_tlast   (rl_m_axis_tlast),
-        .m_axis_0_tdata (nf0_m_axis_tdata),
-        .m_axis_0_tkeep (nf0_m_axis_tkeep),
-        .m_axis_0_tuser (nf0_m_axis_tuser),
-        .m_axis_0_tvalid(nf0_m_axis_tvalid),
-        .m_axis_0_tready(nf0_m_axis_tready),
-        .m_axis_0_tlast (nf0_m_axis_tlast),
-        .m_axis_1_tdata (nf1_m_axis_tdata),
-        .m_axis_1_tkeep (nf1_m_axis_tkeep),
-        .m_axis_1_tuser (nf1_m_axis_tuser),
-        .m_axis_1_tvalid(nf1_m_axis_tvalid),
-        .m_axis_1_tready(nf1_m_axis_tready),
-        .m_axis_1_tlast (nf1_m_axis_tlast)
+        .s_axis_tdata  (s_axis_tdata),
+        .s_axis_tkeep  (s_axis_tkeep),
+        .s_axis_tuser  (s_axis_tuser),
+        .s_axis_tvalid (s_axis_tvalid & s_axis_tready),
+        .s_axis_tready (), // does not assert back-pressure
+        .s_axis_tlast  (s_axis_tlast),
+        .m_axis_0_tdata (nf1_m_axis_tdata),
+        .m_axis_0_tkeep (nf1_m_axis_tkeep),
+        .m_axis_0_tuser (nf1_m_axis_tuser),
+        .m_axis_0_tvalid(nf1_m_axis_tvalid),
+        .m_axis_0_tready(nf1_m_axis_tready),
+        .m_axis_0_tlast (nf1_m_axis_tlast),
+        .m_axis_1_tdata (nf2_m_axis_tdata),
+        .m_axis_1_tkeep (nf2_m_axis_tkeep),
+        .m_axis_1_tuser (nf2_m_axis_tuser),
+        .m_axis_1_tvalid(nf2_m_axis_tvalid),
+        .m_axis_1_tready(nf2_m_axis_tready),
+        .m_axis_1_tlast (nf2_m_axis_tlast)
     );
 
-
+   // slave interface  - top level slave interface
+   // master interface - top level nf3 interface
    trim_ts
    #(
+       .Q_ID_POS         (Q_ID_POS),
+       .Q_ID_WIDTH       (Q_ID_WIDTH),
+       .SRPT_RANK_POS    (SRPT_RANK_POS),
+       .SRPT_RANK_WIDTH  (SRPT_RANK_WIDTH),
+
        .Q_SIZE_BITS      (Q_SIZE_BITS)
    )
    input_trim_ts
@@ -273,45 +287,84 @@ module demo_datapath
        .s_axis_tdata  (s_axis_tdata),
        .s_axis_tkeep  (s_axis_tkeep),
        .s_axis_tuser  (s_axis_tuser),
-       .s_axis_tvalid (s_axis_tvalid & s_axis_tready),
+       .s_axis_tvalid (s_axis_log_tvalid & s_axis_tready), // only record pkts with log_pkt bit set
        .s_axis_tready (),
        .s_axis_tlast  (s_axis_tlast),
        // queue size data
        .qsize_0       (qsize_0),
        .qsize_1       (qsize_1),
-       .qsize_2       (qsize_2),
-       .qsize_3       (qsize_3)
+       .qsize_2       (qsize_2)
    );
 
-   trim_ts
-   #(
-       .Q_SIZE_BITS      (Q_SIZE_BITS)
-   )
-   output_trim_ts
-   (
-       // Global Ports
-       .axis_aclk (axis_aclk),
-       .axis_resetn (axis_resetn),
-       // pkt_storage output pkts
-       .m_axis_tdata  (nf2_m_axis_tdata),
-       .m_axis_tkeep  (nf2_m_axis_tkeep),
-       .m_axis_tuser  (nf2_m_axis_tuser),
-       .m_axis_tvalid (nf2_m_axis_tvalid),
-       .m_axis_tready (nf2_m_axis_tready),
-       .m_axis_tlast  (nf2_m_axis_tlast),
-       // pkt_storage input pkts
-       .s_axis_tdata  (tm_m_axis_tdata),
-       .s_axis_tkeep  (tm_m_axis_tkeep),
-       .s_axis_tuser  (tm_m_axis_tuser),
-       .s_axis_tvalid (tm_m_axis_tvalid & tm_m_axis_tready),
-       .s_axis_tready (),
-       .s_axis_tlast  (tm_m_axis_tlast),
-       // queue size data
-       .qsize_0       (qsize_0),
-       .qsize_1       (qsize_1),
-       .qsize_2       (qsize_2),
-       .qsize_3       (qsize_3)
-   );
+
+   /* TM tvalid generation logic */
+   always @(*) begin
+       tm_state_next = tm_state;
+
+       case(tm_state)
+           IDLE: begin
+               // only generate valid for pkts towards nf0
+               if (s_axis_tvalid & s_axis_tuser[DST_PORT_POS]) begin
+                   s_axis_tm_tvalid = 1;
+                   tm_state_next = FINISH_PKT;
+               end
+               else begin
+                   s_axis_tm_tvalid = 0;
+               end
+           end
+
+           FINISH_PKT: begin
+               s_axis_tm_tvalid = s_axis_tvalid;
+               if (s_axis_tvalid & s_axis_tready & s_axis_tlast) begin
+                   tm_state_next = IDLE;
+               end
+           end
+       endcase
+   end
+
+   always @(posedge axis_aclk) begin
+       if (~axis_resetn) begin
+           tm_state <= IDLE;
+       end
+       else begin
+           tm_state <= tm_state_next;
+       end
+   end
+
+
+   /* Log Pkt tvalid generation logic */
+   always @(*) begin
+       log_state_next = log_state;
+
+       case(log_state)
+           IDLE: begin
+               // only generate valid for pkts that have log_pkt bit set 
+               if (s_axis_tvalid & s_axis_tuser[LOG_PKT_POS]) begin
+                   s_axis_log_tvalid = 1;
+                   log_state_next = FINISH_PKT;
+               end
+               else begin
+                   s_axis_log_tvalid = 0;
+               end
+           end
+
+           FINISH_PKT: begin
+               s_axis_log_tvalid = s_axis_tvalid;
+               if (s_axis_tvalid & s_axis_tready & s_axis_tlast) begin
+                   log_state_next = IDLE;
+               end
+           end
+       endcase
+   end
+
+   always @(posedge axis_aclk) begin
+       if (~axis_resetn) begin
+           log_state <= IDLE;
+       end
+       else begin
+           log_state <= log_state_next;
+       end
+   end
 
 
 `ifdef COCOTB_SIM

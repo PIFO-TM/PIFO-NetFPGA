@@ -197,7 +197,7 @@ module simple_output_queues
             case(ifsm_state[i])
                 WAIT_START: begin
                     if (s_axis_tvalid & s_axis_tready) begin
-                        if (s_axis_tuser[DST_PORT_POS+i*2] & ~d_fifo_nearly_full[i] & ~m_fifo_nearly_full[i]) begin
+                        if (s_axis_tuser[DST_PORT_POS+(i+1)*2] & ~d_fifo_nearly_full[i] & ~m_fifo_nearly_full[i]) begin
                             d_fifo_wr_en[i] = 1;
                             m_fifo_wr_en[i] = 1;
                             ifsm_state_next[i] = RCV_WORD;

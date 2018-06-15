@@ -55,6 +55,15 @@ module trim_ts
     parameter C_M_AXIS_TUSER_WIDTH = 128,
     parameter C_S_AXIS_TUSER_WIDTH = 128,
 
+    parameter BP_COUNT_POS         = 32,
+    parameter BP_COUNT_WIDTH       = 16,
+    parameter Q_ID_POS             = BP_COUNT_POS+BP_COUNT_WIDTH,
+    parameter Q_ID_WIDTH           = 8,
+    parameter RANK_OP_POS          = Q_ID_POS+Q_ID_WIDTH,
+    parameter RANK_OP_WIDTH        = 8,
+    parameter SRPT_RANK_POS        = RANK_OP_POS+RANK_OP_WIDTH,
+    parameter SRPT_RANK_WIDTH      = 16,
+
     parameter Q_SIZE_BITS = 16
 )
 (
@@ -81,8 +90,7 @@ module trim_ts
     // Queue Size Data
     input [Q_SIZE_BITS-1:0]  qsize_0,
     input [Q_SIZE_BITS-1:0]  qsize_1,
-    input [Q_SIZE_BITS-1:0]  qsize_2,
-    input [Q_SIZE_BITS-1:0]  qsize_3
+    input [Q_SIZE_BITS-1:0]  qsize_2
 
 );
 
@@ -128,8 +136,9 @@ module trim_ts
    wire m_fifo_nearly_full;
    wire m_fifo_empty;
 
-   reg [L2_IFSM_STATES-1:0] ifsm_state, ifsm_state_next;
-   reg [TSTAMP_BITS-1:0]    timer_r;
+   reg [L2_IFSM_STATES-1:0]  ifsm_state, ifsm_state_next;
+   reg [TSTAMP_BITS-1:0]     timer_r;
+   reg [SRPT_RANK_WIDTH-1:0] srpt_rank_r, srpt_rank_r_next;
 
    reg [L2_RFSM_STATES-1:0] rfsm_state, rfsm_state_next;
  
@@ -184,12 +193,15 @@ module trim_ts
 
         d_fifo_din = {s_axis_tlast, s_axis_tkeep, s_axis_tdata};
 
+        srpt_rank_r_next = srpt_rank_r;
+
         case(ifsm_state)
             WAIT_START: begin
                 // Write the first word of the pkt
                 if (s_axis_tvalid) begin
                     d_fifo_wr_en = 1;
                     m_fifo_wr_en = 1;
+                    srpt_rank_r_next = s_axis_tuser[SRPT_RANK_POS+SRPT_RANK_WIDTH-1 : SRPT_RANK_POS];
                     ifsm_state_next = WORD_TWO; // NOTE: assumes pkts are at least 2 words
                 end
             end
@@ -200,7 +212,7 @@ module trim_ts
                     d_fifo_wr_en = 1;
                     d_fifo_din = { 1'b1,
                                    {(C_M_AXIS_DATA_WIDTH / 8){1'b1}},
-                                   {timer_r, qsize_3, qsize_2, qsize_1, qsize_0, s_axis_tdata[C_M_AXIS_DATA_WIDTH-TSTAMP_BITS-4*Q_SIZE_BITS-1:0]}
+                                   {timer_r, srpt_rank_r, qsize_2, qsize_1, qsize_0, s_axis_tdata[C_M_AXIS_DATA_WIDTH-TSTAMP_BITS-SRPT_RANK_WIDTH-3*Q_SIZE_BITS-1:0]}
                                  };
                     if (s_axis_tlast) begin
                         ifsm_state_next = WAIT_START;
@@ -223,10 +235,12 @@ module trim_ts
         if (~axis_resetn) begin
             ifsm_state <= WAIT_START;
             timer_r <= 0;
+            srpt_rank_r <= 0;
         end
         else begin
             ifsm_state <= ifsm_state_next;
             timer_r <= timer_r + 1;
+            srpt_rank_r <= srpt_rank_r_next;
         end
     end
 

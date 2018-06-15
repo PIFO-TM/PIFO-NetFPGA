@@ -60,16 +60,10 @@ module simple_rank_tm
     parameter BP_COUNT_WIDTH       = 16,
     parameter Q_ID_POS             = BP_COUNT_POS+BP_COUNT_WIDTH,
     parameter Q_ID_WIDTH           = 8,
-    parameter RANK_OP_POS          = Q_ID_POS+Q_ID_WIDTH, 
-    parameter RANK_OP_WIDTH        = 8, 
-    parameter FLOW_ID_POS          = RANK_OP_POS+RANK_OP_WIDTH, 
-    parameter FLOW_ID_WIDTH        = 16, 
-    parameter FLOW_WEIGHT_POS      = FLOW_ID_POS+FLOW_ID_WIDTH, 
-    parameter FLOW_WEIGHT_WIDTH    = 8,
-    parameter RANK_RST_POS         = FLOW_WEIGHT_POS+FLOW_WEIGHT_WIDTH, 
-    parameter RANK_RST_WIDTH       = 8,
-
-    parameter MAX_NUM_FLOWS        = 4, 
+    parameter RANK_OP_POS          = Q_ID_POS+Q_ID_WIDTH,
+    parameter RANK_OP_WIDTH        = 8,
+    parameter SRPT_RANK_POS        = RANK_OP_POS+RANK_OP_WIDTH,
+    parameter SRPT_RANK_WIDTH      = 16,
 
     // max num pkts the pifo can store
     parameter PIFO_DEPTH           = 4096,
@@ -78,7 +72,7 @@ module simple_rank_tm
     parameter STORAGE_MAX_PKTS     = 2048,
     parameter NUM_SKIP_LISTS       = 11,
     // Queue params
-    parameter NUM_QUEUES           = 4,
+    parameter NUM_QUEUES           = 3,
     parameter QUEUE_LIMIT          = STORAGE_MAX_PKTS/NUM_QUEUES,
     parameter Q_SIZE_BITS          = 16
 )
@@ -105,8 +99,7 @@ module simple_rank_tm
 
     output [Q_SIZE_BITS-1:0]                       qsize_0,
     output [Q_SIZE_BITS-1:0]                       qsize_1,
-    output [Q_SIZE_BITS-1:0]                       qsize_2,
-    output [Q_SIZE_BITS-1:0]                       qsize_3
+    output [Q_SIZE_BITS-1:0]                       qsize_2
 
 );
 
@@ -171,8 +164,7 @@ module simple_rank_tm
    reg                         pipe_insert;
    reg [PTRS_WIDTH-1:0]        pipe_meta_in;
    reg [RANK_OP_WIDTH-1:0]     pipe_rank_op_in;
-   reg [FLOW_ID_WIDTH-1:0]     pipe_flowID_in;
-   reg [FLOW_WEIGHT_WIDTH-1:0] pipe_flow_weight_in;
+   reg [SRPT_RANK_WIDTH-1:0]   pipe_srpt_rank_in;
    reg                         pipe_remove;
    wire                        pipe_valid_out;
    wire [RANK_WIDTH-1:0]       pipe_rank_out;
@@ -183,9 +175,7 @@ module simple_rank_tm
 
    reg  [PTRS_WIDTH-1:0] pipe_meta_in_r, pipe_meta_in_r_next;
    reg  [RANK_OP_WIDTH-1:0] pipe_rank_op_in_r, pipe_rank_op_in_r_next;
-   reg  [FLOW_ID_WIDTH-1:0] pipe_flowID_in_r, pipe_flowID_in_r_next;
-   reg  [FLOW_WEIGHT_WIDTH-1:0] pipe_flow_weight_in_r, pipe_flow_weight_in_r_next;
-   reg  pipe_rst_r, pipe_rst_r_next;
+   reg  [SRPT_RANK_WIDTH-1:0] pipe_srpt_rank_in_r, pipe_srpt_rank_in_r_next;
 
    reg  [L2_PIPE_STATES-1:0]    ifsm_pipe_state, ifsm_pipe_state_next;
    reg                          ifsm_pipe_ready;
@@ -308,16 +298,13 @@ module simple_rank_tm
 
    rank_pipe
    #(
-       .FLOW_ID_WIDTH (FLOW_ID_WIDTH),
-       .FLOW_WEIGHT_WIDTH (FLOW_WEIGHT_WIDTH),
-       .MAX_NUM_FLOWS (MAX_NUM_FLOWS),
        .RANK_CODE_BITS (RANK_OP_WIDTH),
        .RANK_WIDTH (RANK_WIDTH),
        .META_WIDTH (PTRS_WIDTH)
    )
    rank_pipe_inst
    (
-       .rst (~axis_resetn | pipe_rst_r),
+       .rst (~axis_resetn),
        .clk (axis_aclk),
    
        // Input Interface -- Can only insert on cycles where busy == 0
@@ -325,8 +312,7 @@ module simple_rank_tm
        .insert          (pipe_insert),
        .meta_in         (pipe_meta_in),
        .rank_op_in      (pipe_rank_op_in),
-       .flowID_in       (pipe_flowID_in),
-       .flow_weight_in  (pipe_flow_weight_in),
+       .srpt_rank_in    (pipe_srpt_rank_in),
    
        // Output Interface -- Can only remove on cycles where valid_out == 1
        .remove    (pipe_remove),
@@ -347,9 +333,7 @@ module simple_rank_tm
 
       pipe_meta_in_r_next        = pipe_meta_in_r;
       pipe_rank_op_in_r_next     = pipe_rank_op_in_r; 
-      pipe_flowID_in_r_next      = pipe_flowID_in_r;
-      pipe_flow_weight_in_r_next = pipe_flow_weight_in_r;
-      pipe_rst_r_next            = pipe_rst_r;
+      pipe_srpt_rank_in_r_next      = pipe_srpt_rank_in_r;
 
       s_axis_fifo_tready = 1;
 
@@ -357,16 +341,14 @@ module simple_rank_tm
           WAIT_START: begin
               // Wait until the first word of the pkt
               if (s_axis_fifo_tready && s_axis_fifo_tvalid) begin
-                  pipe_rst_r_next = s_axis_fifo_tuser[RANK_RST_POS];
-                  if (s_axis_tready_storage & ifsm_pipe_ready & (q_size_r[curr_s_q_id] < QUEUE_LIMIT - MAX_PKT_SIZE) & ~s_axis_fifo_tuser[RANK_RST_POS]) begin
+                  if (s_axis_tready_storage & ifsm_pipe_ready & (q_size_r[curr_s_q_id] < QUEUE_LIMIT - MAX_PKT_SIZE)) begin
                       // write the 1st word of the pkt to storage
                       s_axis_tvalid_storage = 1;
                       // Kick off the PIFO writing state machine
                       ifsm_pipe_state_next = WRITE_PIPE;
                       pipe_meta_in_r_next = storage_ptr_out_tdata;
                       pipe_rank_op_in_r_next     = s_axis_fifo_tuser[RANK_OP_POS+RANK_OP_WIDTH-1 : RANK_OP_POS];
-                      pipe_flowID_in_r_next      = s_axis_fifo_tuser[FLOW_ID_POS+FLOW_ID_WIDTH-1 : FLOW_ID_POS];
-                      pipe_flow_weight_in_r_next = s_axis_fifo_tuser[FLOW_WEIGHT_POS+FLOW_WEIGHT_WIDTH-1 : FLOW_WEIGHT_POS];
+                      pipe_srpt_rank_in_r_next   = s_axis_fifo_tuser[SRPT_RANK_POS+SRPT_RANK_WIDTH-1 : SRPT_RANK_POS];
                       // TODO: static simulation check that storage_ptr_out_tvalid == 1
                       // It should always be 1 here because the pointers should always be returned one the same cycle as the first word
 
@@ -422,8 +404,7 @@ module simple_rank_tm
       pipe_insert = 0;
       pipe_meta_in = 0;
       pipe_rank_op_in = 0;
-      pipe_flowID_in = 0;
-      pipe_flow_weight_in = 0;
+      pipe_srpt_rank_in = 0;
 
       case(ifsm_pipe_state)
           PIPE_START: begin
@@ -438,8 +419,7 @@ module simple_rank_tm
                   pipe_insert = 1;
                   pipe_meta_in = pipe_meta_in_r;
                   pipe_rank_op_in = pipe_rank_op_in_r;
-                  pipe_flowID_in = pipe_flowID_in_r;
-                  pipe_flow_weight_in = pipe_flow_weight_in_r;
+                  pipe_srpt_rank_in = pipe_srpt_rank_in_r;
                   ifsm_pipe_state_next = PIPE_START;
               end
           end
@@ -451,9 +431,8 @@ module simple_rank_tm
          ifsm_state <= WAIT_START;
          pipe_meta_in_r <= 0;
          pipe_rank_op_in_r <= 0;
-         pipe_flowID_in_r <= 0;
-         pipe_flow_weight_in_r <= 0;
-         pipe_rst_r <= 0;
+         pipe_srpt_rank_in_r <= 0;
+
          ifsm_pipe_state <= PIPE_START;
          pkt_in_accepted_r <= 0;
       end
@@ -461,9 +440,7 @@ module simple_rank_tm
          ifsm_state <= ifsm_state_next;
          pipe_meta_in_r <= pipe_meta_in_r_next;
          pipe_rank_op_in_r <= pipe_rank_op_in_r_next;
-         pipe_flowID_in_r <= pipe_flowID_in_r_next;
-         pipe_flow_weight_in_r <= pipe_flow_weight_in_r_next;
-         pipe_rst_r <= pipe_rst_r_next;
+         pipe_srpt_rank_in_r <= pipe_srpt_rank_in_r_next;
          ifsm_pipe_state <= ifsm_pipe_state_next;
          pkt_in_accepted_r <= pkt_in_accepted_r_next;
       end
@@ -645,21 +622,11 @@ module simple_rank_tm
 wire [Q_SIZE_BITS-1:0] q_size_0 = q_size_r[0];
 wire [Q_SIZE_BITS-1:0] q_size_1 = q_size_r[1];
 wire [Q_SIZE_BITS-1:0] q_size_2 = q_size_r[2];
-wire [Q_SIZE_BITS-1:0] q_size_3 = q_size_r[3];
 
 // debugging outputs
 assign qsize_0 = q_size_r[0];
 assign qsize_1 = q_size_r[1];
 assign qsize_2 = q_size_r[2];
-assign qsize_3 = q_size_r[3];
-
-//`ifdef COCOTB_SIM
-//initial begin
-//  $dumpfile ("simple_tm_sl_drop_waveform.vcd");
-//  $dumpvars (0,simple_tm_sl_drop);
-//  #1 $display("Sim running...");
-//end
-//`endif
    
 endmodule // simple_rank_tm
 
