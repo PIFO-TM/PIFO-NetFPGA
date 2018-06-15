@@ -322,7 +322,7 @@ module nf_datapath #(
        .PIFO_REG_DEPTH (16),
        .STORAGE_MAX_PKTS (2048),
        .NUM_SKIP_LISTS (8),
-       .NUM_QUEUES (4)
+       .NUM_QUEUES (3)
    )
    demo_datapath_inst
    (
