@@ -108,7 +108,7 @@ module simple_output_queues
    localparam RFSM_FINISH_PKT = 1;
    localparam L2_RFSM_STATES = 1;   
 
-   localparam MAX_DEPTH = 256; // measured in 32B words
+   localparam MAX_DEPTH = 4096; // measured in 32B words
    localparam L2_MAX_DEPTH = log2(MAX_DEPTH);
 
    localparam MAX_PKTS = MAX_DEPTH/2; // min pkt size is 64B
