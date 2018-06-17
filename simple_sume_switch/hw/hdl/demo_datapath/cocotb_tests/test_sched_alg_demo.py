@@ -27,8 +27,8 @@ NF1_PCAP_FILE = 'iperf-sim-traces/iperf3-10MB-dport1-trim.pcap'
 NF1_META_FILE = 'iperf-sim-traces/metadata_10MB_dport1.csv'
 NF2_PCAP_FILE = 'iperf-sim-traces/iperf3-20MB-dport2-trim.pcap'
 NF2_META_FILE = 'iperf-sim-traces/metadata_20MB_dport2.csv'
-INGRESS_LINK_RATE = 10 # Gbps
-EGRESS_LINK_RATE = 4 # Gbps
+INGRESS_LINK_RATE = 20 # Gbps
+EGRESS_LINK_RATE = 10 # Gbps
 
 START_DELAY = 100
 RESULTS_FILE = 'cocotb_results.json'
@@ -56,20 +56,24 @@ def reset_dut(dut):
         yield FallingEdge(dut.axis_aclk)
     yield RisingEdge(dut.axis_aclk)
 
-def make_pkts_meta_in(pcap_file, meta_file):
-    # read the pkts
-    pkts_in = rdpcap(pcap_file)
-    #pkts_in =  pkts_in[0:NUM_PKTS]
-
+def rdmeta(meta_file):
     meta_in = []
     with open(meta_file) as f:
         for line in f:
             vals = map(int, line.strip().split(','))
 #            meta = Metadata(pkt_len=vals[-1], src_port=vals[-2], dst_port=vals[-3], bp_count=BP_COUNT, q_id=vals[-5], rank_op=vals[-6], srpt_rank=vals[-7], log_pkt=vals[-8])
-            meta = Metadata(pkt_len=vals[-1], src_port=vals[-2], dst_port=vals[-3], bp_count=BP_COUNT, q_id=vals[-5], rank_op=vals[-6], srpt_rank=vals[-7], log_pkt=1)
+            meta = Metadata(pkt_len=vals[-1], src_port=vals[-2], dst_port=vals[-3], bp_count=vals[-4], q_id=vals[-5], rank_op=vals[-6], srpt_rank=vals[-7], log_pkt=1)
             tuser = BinaryValue(bits=len(meta)*8, bigEndian=False)
             tuser.set_buff(str(meta))
-            meta_in.append(tuser)
+            meta_in.append(tuser)   
+    return meta_in
+
+def make_pkts_meta_in(pcap_file, meta_file):
+    # read the pkts
+    pkts_in = rdpcap(pcap_file)
+    #pkts_in =  pkts_in[0:NUM_PKTS]
+
+    meta_in = rdmeta(meta_file)
 
     print 'len(pkts_in) = {}'.format(len(pkts_in))
     return pkts_in, meta_in
@@ -110,7 +114,7 @@ def test_sched_alg_demo(dut):
     yield ClockCycles(dut.axis_aclk, START_DELAY)
 
     # read the pkts and rank values
-    pkts_in, meta_in = make_pkts_meta_in(NF2_PCAP_FILE, NF2_META_FILE)
+    pkts_in, meta_in = make_pkts_meta_in(NF1_PCAP_FILE, NF1_META_FILE)
 
     print 'len(meta_in) = {}'.format(len(meta_in))
 
@@ -118,7 +122,7 @@ def test_sched_alg_demo(dut):
     pkt_master = AXI4StreamMaster(dut, 's_axis', dut.axis_aclk)
 
     # Attach an AXI4StreamSlave to the output pkt interface
-    pkt_slave = AXI4StreamSlave(dut, 'nf0_m_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT)
+    pkt_slave = AXI4StreamSlave(dut, 'nf0_m_axis', dut.axis_aclk, tready_delay=BP_COUNT, idle_timeout=IDLE_TIMEOUT)
     input_logger = AXI4StreamSlave(dut, 'nf3_m_axis', dut.axis_aclk, idle_timeout=IDLE_TIMEOUT*1000000)
 
     # start reading for pkts
