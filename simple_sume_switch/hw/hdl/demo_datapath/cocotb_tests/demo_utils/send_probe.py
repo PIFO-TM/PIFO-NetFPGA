@@ -32,7 +32,7 @@ class Prober(object):
             self.log_pkt = log_pkts[0]
     
     def sniff_probe(self, iface):
-        sniff(iface=iface, prn=self.record_log_pkt, count=1)
+        sniff(iface=iface, prn=self.record_log_pkt, count=2)
 
 def send_probe(send_iface, rcv_iface, sport, reset):
     p = Prober(send_iface, rcv_iface, sport, reset)
@@ -40,7 +40,7 @@ def send_probe(send_iface, rcv_iface, sport, reset):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--riface', type=str, default='eth1', help="the interface to sniff on")
+    parser.add_argument('--riface', type=str, default='eth2', help="the interface to sniff on")
     parser.add_argument('--siface', type=str, default='eth2', help="the interface to send out of")
     parser.add_argument('--sport', type=int, default=0, help="the TCP sport field to use")
     parser.add_argument('--no_rst', action='store_true', default=False, help="do not reset RR rank pipe state")
