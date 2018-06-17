@@ -22,11 +22,11 @@ class LogPkt():
 
 class LogPktParser(object):
 
-    def __init__(self, pcap_file=None):
+    def __init__(self):
         pass
 
 
-    def parse_pkts(self, pkt_bufs):
+    def parse_pkts(self, pkt_bufs, max_fid=None):
         """
         Inputs:
             pkt_bufs - a list of raw pkt buffers
@@ -34,7 +34,7 @@ class LogPktParser(object):
         parsed_pkts = []
         for buf in pkt_bufs:
             pkt = self.parse_pkt(buf)
-            if pkt is not None:
+            if pkt is not None and (max_fid is None or (max_fid is not None and pkt.flowID < max_fid)):
                 parsed_pkts.append(pkt)
         parsed_pkts.sort(key=lambda x: x.time)
         return parsed_pkts
