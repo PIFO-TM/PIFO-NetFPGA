@@ -332,13 +332,13 @@ module demo_datapath
    end
 
 
-`ifdef COCOTB_SIM
-initial begin
-  $dumpfile ("demo_datapath_waveform.vcd");
-  $dumpvars (0, demo_datapath);
-  #1 $display("Sim running...");
-end
-`endif
+//`ifdef COCOTB_SIM
+//initial begin
+//  $dumpfile ("demo_datapath_waveform.vcd");
+//  $dumpvars (0, demo_datapath);
+//  #1 $display("Sim running...");
+//end
+//`endif
 
 endmodule // demo_datapath
 
