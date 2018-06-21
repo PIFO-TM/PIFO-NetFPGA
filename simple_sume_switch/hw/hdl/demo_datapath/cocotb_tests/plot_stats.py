@@ -36,6 +36,14 @@ def plot_stats(input_log_pkts):
     in_queue_stats.plot_queues()
     plt.title('Queue Sizes')
 
+    # plot pkt sizes
+    plt.figure()
+    flow_stats.plot_pkt_sizes('Packet Sizes', ymax=18, linewidth=5)
+
+    # plot per flow queue size measurements
+    plt.figure()
+    flow_stats.plot_q_sizes('Queue Size', ymax=18, linewidth=5)
+
 def parse_log_pkts(pcap_file):
     try:
         log_pkts = []
@@ -61,7 +69,7 @@ def main():
 #    args = parser.parse_args()
 
     # parse the logged pcap files
-    input_log_pkts = parse_log_pkts('srpt-logs/eth2.pcap')
+    input_log_pkts = parse_log_pkts('fct_logs/eth2.pcap')
 
     # plot input / output rates
     plot_stats(input_log_pkts)

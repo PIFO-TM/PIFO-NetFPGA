@@ -1,5 +1,6 @@
 
 import sys, os
+import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
@@ -29,6 +30,20 @@ class FlowStats(object):
             else:
                 flow_pkts[flowID].append((pkt.time, pkt))
         return flow_pkts
+
+    def calc_fcts(self):
+        """
+        Compute the flow completion time stats (ms)
+        """
+        flow_fcts = {}
+        print "Computing FCTS:"
+        for flowID, pkts in self.flow_pkts.items():
+            fct = (pkts[-1][0] - pkts[0][0])*1e-6
+            flow_fcts[flowID] = fct 
+            print '\tflow {:>3} FCT = {:<8.2f} ms'.format(flowID, fct)
+        avg_fct = np.average(flow_fcts.values())
+        std_fct = np.std(flow_fcts.values())
+        print 'Average FCT = {:>8.3f} +/- {:<8.3f} ms'.format(avg_fct, std_fct)
 
     def calc_flow_rates(self, flow_pkts):
         """
@@ -80,6 +95,14 @@ class FlowStats(object):
             i += 1
             i = i % len(lines)
 
+    def marker_gen(self):
+        markers = ['o', 'v', '*', 'x']
+        i = 0
+        while True:
+            yield markers[i]
+            i += 1
+            i = i % len(markers)
+
     def plot_rates(self, title, ymax=None, linewidth=1):
         """
         Plots the flow rates
@@ -116,11 +139,53 @@ class FlowStats(object):
                 max_rank = max(ranks) if max(ranks) > max_rank else max_rank
             if flowID is not None:
                 linestyle = line_generator.next()
-                plt.plot(times, ranks, label='Flow {}'.format(flowID), linewidth=linewidth, linestyle=linestyle)
+                plt.plot(times, ranks, label='Flow {}'.format(flowID), linewidth=linewidth, linestyle=linestyle, marker='o')
         plt.xlabel('time (ms)')
         plt.ylabel('rank (64KB remaining)')
         plt.title(title)
         plt.legend(loc='upper right')
         if ymax is not None:
             plt.ylim(0, max_rank)
+
+    def plot_pkt_sizes(self, title, ymax=None, linewidth=1):
+        """
+        Plots the flow pkt sizes
+        """
+        line_generator = self.line_gen()
+        max_size = 0
+        for flowID, pkt_points in self.flow_pkts.items():
+            times = [(point[0] - self.start_time)*1e-6 for point in pkt_points]
+            sizes = [point[1].length for point in pkt_points]
+            if len(sizes) > 0:
+                max_size = max(sizes) if max(sizes) > max_size else max_size
+            if flowID is not None:
+                linestyle = line_generator.next()
+                plt.plot(times, sizes, label='Flow {}'.format(flowID), linewidth=linewidth, linestyle=linestyle, marker='o')
+        plt.xlabel('time (ms)')
+        plt.ylabel('size (bytes)')
+        plt.title(title)
+        plt.legend(loc='upper left')
+        if ymax is not None:
+            plt.ylim(0, max_size)
+
+    def plot_q_sizes(self, title, ymax=None, linewidth=1):
+        """
+        Plots per flow queue size measurements
+        """
+        marker_generator = self.marker_gen()
+        max_size = 0
+        for flowID, pkt_points in self.flow_pkts.items():
+            times = [(point[0] - self.start_time)*1e-6 for point in pkt_points]
+            sizes = [point[1].qsizes[0] for point in pkt_points]
+            if len(sizes) > 0:
+                max_size = max(sizes) if max(sizes) > max_size else max_size
+            if flowID is not None:
+                marker = marker_generator.next()
+                plt.plot(times, sizes, label='Flow {}'.format(flowID), linewidth=linewidth, linestyle='', marker=marker)
+        plt.xlabel('time (ms)')
+        plt.ylabel('queue size (64B segments)')
+        plt.title(title)
+        plt.legend(loc='upper left')
+        if ymax is not None:
+            plt.ylim(0, max_size*1.1)
 

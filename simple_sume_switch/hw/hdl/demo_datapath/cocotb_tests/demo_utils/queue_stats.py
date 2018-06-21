@@ -41,7 +41,7 @@ class QueueStats(object):
         plt.figure()
         for q_id, sizes in self.qsizes.items():
             linestyle, color = line_generator.next()
-            plt.plot(self.times, sizes, linewidth=5, label='Queue {}'.format(q_id), linestyle=linestyle)
+            plt.plot(self.times, sizes, linewidth=5, label='Queue {}'.format(q_id), linestyle=linestyle, marker='o')
             #plt.scatter(self.times, sizes, label='Queue {}'.format(q_id), c=color)
     #    plt.title('Queue Sizes')
         plt.xlabel('Time (ms)')
