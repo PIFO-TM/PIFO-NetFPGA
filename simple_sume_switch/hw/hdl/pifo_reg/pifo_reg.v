@@ -2,26 +2,34 @@
 
 module pifo_reg
 #(
-    parameter L2_REG_WIDTH = 2,
-    parameter RANK_WIDTH = 8,
-    parameter META_WIDTH = 8
+    parameter L2_REG_WIDTH = 4,
+    parameter RANK_WIDTH = 16,
+    parameter META_WIDTH = 12
 )
 (
-    input rst,
-    input clk,
-    input insert,
-    input [RANK_WIDTH-1:0] rank_in,
-    input [META_WIDTH-1:0] meta_in,
-    input remove,
-    output [RANK_WIDTH-1:0] rank_out,
-    output [META_WIDTH-1:0] meta_out,
-    output reg valid_out,
-    output [RANK_WIDTH-1:0] max_rank_out,
-    output [META_WIDTH-1:0] max_meta_out,
-    output reg max_valid_out,
+    input                       rst,
+    input                       clk,
+
+    // Insertion interface
+    output reg                  full,
+    input                       insert,
+    input [RANK_WIDTH-1:0]      rank_in,
+    input [META_WIDTH-1:0]      meta_in,
+
+    // Removal interface
+    output reg                  valid_out,
+    input                       remove,
+    output [RANK_WIDTH-1:0]     rank_out,
+    output [META_WIDTH-1:0]     meta_out,
+
+    // Max entry (evicted upon inserting into full reg)
+    output reg                  max_valid_out,
+    output [RANK_WIDTH-1:0]     max_rank_out,
+    output [META_WIDTH-1:0]     max_meta_out,
+
+    // Stats
     output reg [L2_REG_WIDTH:0] num_entries,
-    output reg empty,
-    output reg full
+    output reg                  empty
 );
 
     localparam REG_WIDTH = 2**L2_REG_WIDTH;
@@ -44,17 +52,17 @@ module pifo_reg
     reg [RANK_WIDTH-1:0] rank_in_ltch;
     reg [META_WIDTH-1:0] meta_in_ltch;
     
-    always @*
+   always @(*)
     begin
         for (j = 0; j < REG_WIDTH; j=j+1)
         begin
-            min_rank[0][j] <= rank[j];
-            min_meta[0][j] <= meta[j];
-            min_idx[0][j] <= j;
-            max_rank[0][j] <= rank[j];
-            max_meta[0][j] <= meta[j];
-            max_idx[0][j] <= j;
-            mvalid[0][j] <= valid[j];
+            min_rank[0][j] = rank[j];
+            min_meta[0][j] = meta[j];
+            min_idx[0][j]  = j;
+            max_rank[0][j] = rank[j];
+            max_meta[0][j] = meta[j];
+            max_idx[0][j]  = j;
+            mvalid[0][j]   = valid[j];
         end
 
         for (i = 0; i < COMP_LVLS; i=i+1)
@@ -63,37 +71,33 @@ module pifo_reg
                 if (((min_rank[i][j] <= min_rank[i][j+1]) && (mvalid[i][j] == 1'b1) && (mvalid[i][j+1] == 1'b1)) ||
                     ((mvalid[i][j] == 1'b1) && (mvalid[i][j+1] !== 1'b1)))
                 begin
-                    min_rank[i+1][j/2] <= min_rank[i][j];
-                    min_meta[i+1][j/2] <= min_meta[i][j];
-                    min_idx[i+1][j/2]  <= min_idx[i][j];
+                    min_rank[i+1][j/2] = min_rank[i][j];
+                    min_meta[i+1][j/2] = min_meta[i][j];
+                    min_idx[i+1][j/2]  = min_idx[i][j];
                 end
-                else if (((min_rank[i][j] > min_rank[i][j+1]) && (mvalid[i][j] == 1'b1) && (mvalid[i][j+1] == 1'b1)) ||
-                         ((mvalid[i][j] !== 1'b1) && (mvalid[i][j+1] == 1'b1)))
-                begin
-                    min_rank[i+1][j/2] <= min_rank[i][j+1];
-                    min_meta[i+1][j/2] <= min_meta[i][j+1];
-                    min_idx[i+1][j/2]  <= min_idx[i][j+1];                      
+                else begin
+                    min_rank[i+1][j/2] = min_rank[i][j+1];
+                    min_meta[i+1][j/2] = min_meta[i][j+1];
+                    min_idx[i+1][j/2]  = min_idx[i][j+1];                      
                 end
                 
                 if (((max_rank[i][j] > max_rank[i][j+1]) && (mvalid[i][j] == 1'b1) && (mvalid[i][j+1] == 1'b1)) ||
                     ((mvalid[i][j] == 1'b1) && (mvalid[i][j+1] !== 1'b1)))
                 begin
-                    max_rank[i+1][j/2] <= max_rank[i][j];
-                    max_meta[i+1][j/2] <= max_meta[i][j];
-                    max_idx[i+1][j/2]  <= max_idx[i][j];
+                    max_rank[i+1][j/2] = max_rank[i][j];
+                    max_meta[i+1][j/2] = max_meta[i][j];
+                    max_idx[i+1][j/2]  = max_idx[i][j];
                 end
-                else if (((max_rank[i][j] <= max_rank[i][j+1]) && (mvalid[i][j] == 1'b1) && (mvalid[i][j+1] == 1'b1)) ||
-                         ((mvalid[i][j] !== 1'b1) && (mvalid[i][j+1] == 1'b1)))
-                begin
-                    max_rank[i+1][j/2] <= max_rank[i][j+1];
-                    max_meta[i+1][j/2] <= max_meta[i][j+1];
-                    max_idx[i+1][j/2]  <= max_idx[i][j+1];                      
+                else begin
+                    max_rank[i+1][j/2] = max_rank[i][j+1];
+                    max_meta[i+1][j/2] = max_meta[i][j+1];
+                    max_idx[i+1][j/2]  = max_idx[i][j+1];                      
                 end
                 
                 if ((mvalid[i][j] == 1'b1) || (mvalid[i][j+1] == 1'b1))
-                    mvalid[i+1][j/2] <= 1'b1;
+                    mvalid[i+1][j/2] = 1'b1;
                 else
-                    mvalid[i+1][j/2] <= 1'b0;
+                    mvalid[i+1][j/2] = 1'b0;
             end
     end
 
@@ -104,7 +108,7 @@ module pifo_reg
     assign max_rank_out = max_rank[COMP_LVLS-1][0];
     assign max_meta_out = max_meta[COMP_LVLS-1][0];
     
-    // Min/max valig generation
+    // Min/max valid generation
     always @(posedge clk)
     begin
         if (rst)
