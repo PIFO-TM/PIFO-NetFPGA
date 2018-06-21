@@ -91,7 +91,8 @@ module axi_stream_fifo
    /* For Insertion FSM */
    localparam WAIT_START     = 0;
    localparam RCV_WORD       = 1;
-   localparam L2_IFSM_STATES = 1;
+   localparam TRIM_PKT       = 2;
+   localparam L2_IFSM_STATES = 2;
 
    /* For Removal FSM */
    localparam RFSM_START = 0;
@@ -104,6 +105,10 @@ module axi_stream_fifo
    localparam MAX_PKTS = MAX_DEPTH/2; // min pkt size is 64B
    localparam L2_MAX_PKTS = log2(MAX_PKTS);
 
+   localparam MAX_PKT_SIZE = 1600; // In bytes
+   localparam MAX_PKT_WORDS = MAX_PKT_SIZE/(C_S_AXIS_DATA_WIDTH / 8);
+   localparam L2_MAX_WORDS = log2(MAX_PKT_WORDS);
+
    //---------------------- Wires and Regs ---------------------------- 
    reg  d_fifo_wr_en;
    reg  d_fifo_rd_en;
@@ -115,8 +120,12 @@ module axi_stream_fifo
    wire m_fifo_nearly_full;
    wire m_fifo_empty;
 
+   reg s_axis_fifo_tlast;
+
    reg [L2_IFSM_STATES-1:0] ifsm_state, ifsm_state_next;
    reg [L2_RFSM_STATES-1:0] rfsm_state, rfsm_state_next;
+
+   reg [L2_MAX_WORDS:0] pkt_word_cnt_r, pkt_word_cnt_r_next;
  
    //-------------------- Modules and Logic ---------------------------
 
@@ -126,7 +135,7 @@ module axi_stream_fifo
           .MAX_DEPTH_BITS(L2_MAX_DEPTH)
       )
       data_fifo
-        (.din         ({s_axis_tlast, s_axis_tkeep, s_axis_tdata}),     // Data in
+        (.din         ({s_axis_fifo_tlast, s_axis_tkeep, s_axis_tdata}),     // Data in
          .wr_en       (d_fifo_wr_en),       // Write enable
          .rd_en       (d_fifo_rd_en),       // Read the next word
          .dout        ({m_axis_tlast, m_axis_tkeep, m_axis_tdata}),
@@ -165,13 +174,18 @@ module axi_stream_fifo
         d_fifo_wr_en = 0;
         m_fifo_wr_en = 0;
 
+        s_axis_fifo_tlast = s_axis_tlast;
         s_axis_tready = ~d_fifo_nearly_full & ~m_fifo_nearly_full;
+
+        pkt_word_cnt_r_next = pkt_word_cnt_r;
 
         case(ifsm_state)
             WAIT_START: begin
-                if (s_axis_tvalid & s_axis_tready) begin
+                // drop any single cycle packets
+                if (s_axis_tvalid & s_axis_tready & ~s_axis_tlast) begin
                     d_fifo_wr_en = 1;
                     m_fifo_wr_en = 1;
+                    pkt_word_cnt_r_next = 1;
                     ifsm_state_next = RCV_WORD;
                 end
             end
@@ -179,9 +193,23 @@ module axi_stream_fifo
             RCV_WORD: begin
                 if (s_axis_tvalid & s_axis_tready) begin
                     d_fifo_wr_en = 1;
+                    pkt_word_cnt_r_next = pkt_word_cnt_r + 1;
                     if (s_axis_tlast) begin
                         ifsm_state_next = WAIT_START;
+                        pkt_word_cnt_r_next = 0;
                     end
+                    else if (pkt_word_cnt_r == MAX_PKT_WORDS-1) begin
+                        ifsm_state_next = TRIM_PKT;
+                        pkt_word_cnt_r_next = 0;
+                        s_axis_fifo_tlast = 1;
+                    end
+                end
+            end
+
+            TRIM_PKT: begin
+                s_axis_fifo_tlast = 0;
+                if (s_axis_tvalid & s_axis_tready & s_axis_tlast) begin
+                    ifsm_state_next = WAIT_START;
                 end
             end
         endcase
@@ -190,9 +218,11 @@ module axi_stream_fifo
     always @(posedge axis_aclk) begin
         if (~axis_resetn) begin
             ifsm_state <= WAIT_START;
+            pkt_word_cnt_r <= 0;
         end
         else begin
             ifsm_state <= ifsm_state_next;
+            pkt_word_cnt_r <= pkt_word_cnt_r_next;
         end
     end
 

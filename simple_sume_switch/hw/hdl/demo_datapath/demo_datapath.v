@@ -129,12 +129,12 @@ module demo_datapath
 
    // ------------- wires ---------------
 
-   wire [C_S_AXIS_DATA_WIDTH - 1:0]              rl_m_axis_tdata;
-   wire [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      rl_m_axis_tkeep;
-   wire [C_S_AXIS_TUSER_WIDTH-1:0]               rl_m_axis_tuser;
-   wire                                          rl_m_axis_tvalid;
-   wire                                          rl_m_axis_tready;
-   wire                                          rl_m_axis_tlast;
+   wire [C_S_AXIS_DATA_WIDTH - 1:0]              tm_m_axis_tdata;
+   wire [((C_S_AXIS_DATA_WIDTH / 8)) - 1:0]      tm_m_axis_tkeep;
+   wire [C_S_AXIS_TUSER_WIDTH-1:0]               tm_m_axis_tuser;
+   wire                                          tm_m_axis_tvalid;
+   wire                                          tm_m_axis_tready;
+   wire                                          tm_m_axis_tlast;
 
    reg [L2_NUM_STATES-1:0] tm_state, tm_state_next;
    reg s_axis_tm_tvalid;
@@ -174,12 +174,12 @@ module demo_datapath
        .axis_aclk (axis_aclk),
        .axis_resetn (axis_resetn),
        // pkt_storage output pkts
-       .m_axis_tdata  (nf0_m_axis_tdata),
-       .m_axis_tkeep  (nf0_m_axis_tkeep),
-       .m_axis_tuser  (nf0_m_axis_tuser),
-       .m_axis_tvalid (nf0_m_axis_tvalid),
-       .m_axis_tready (nf0_m_axis_tready),
-       .m_axis_tlast  (nf0_m_axis_tlast),
+       .m_axis_tdata  (tm_m_axis_tdata),
+       .m_axis_tkeep  (tm_m_axis_tkeep),
+       .m_axis_tuser  (tm_m_axis_tuser),
+       .m_axis_tvalid (tm_m_axis_tvalid),
+       .m_axis_tready (tm_m_axis_tready),
+       .m_axis_tlast  (tm_m_axis_tlast),
        // pkt_storage input pkts
        .s_axis_tdata  (s_axis_tdata),
        .s_axis_tkeep  (s_axis_tkeep),
@@ -193,6 +193,28 @@ module demo_datapath
        .qsize_2       (qsize_2)
    );
 
+
+   /* Output FIFO - mainly here to ensure only valid size packets are sent out */
+   axi_stream_fifo axis_output_fifo
+   (
+       // Global Ports
+       .axis_aclk (axis_aclk),
+       .axis_resetn (axis_resetn),
+       // pkt_storage output pkts
+       .m_axis_tdata  (nf0_m_axis_tdata),
+       .m_axis_tkeep  (nf0_m_axis_tkeep),
+       .m_axis_tuser  (nf0_m_axis_tuser),
+       .m_axis_tvalid (nf0_m_axis_tvalid),
+       .m_axis_tready (nf0_m_axis_tready),
+       .m_axis_tlast  (nf0_m_axis_tlast),
+       // pkt_storage input pkts
+       .s_axis_tdata  (tm_m_axis_tdata),
+       .s_axis_tkeep  (tm_m_axis_tkeep),
+       .s_axis_tuser  (tm_m_axis_tuser),
+       .s_axis_tvalid (tm_m_axis_tvalid),
+       .s_axis_tready (tm_m_axis_tready),
+       .s_axis_tlast  (tm_m_axis_tlast)
+   );
 
    // Output queues
    // slave interface  - top level slave interface
