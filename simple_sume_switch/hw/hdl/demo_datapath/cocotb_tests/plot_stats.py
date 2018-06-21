@@ -63,13 +63,12 @@ def parse_log_pkts(pcap_file):
     return log_pkts
 
 def main():
-#    parser = argparse.ArgumentParser()
-#    parser.add_argument('--in_iface', type=str, default='eth1', help="the interface on which to receive input log pkts")
-#    parser.add_argument('--out_iface', type=str, default='eth2', help="the interface on which to receive output log pkts")
-#    args = parser.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--pcap', type=str, default='fct_logs/eth2.pcap', help="the pcap trace to plot")
+    args = parser.parse_args()
 
     # parse the logged pcap files
-    input_log_pkts = parse_log_pkts('fct_logs/eth2.pcap')
+    input_log_pkts = parse_log_pkts(args.pcap)
 
     # plot input / output rates
     plot_stats(input_log_pkts)
