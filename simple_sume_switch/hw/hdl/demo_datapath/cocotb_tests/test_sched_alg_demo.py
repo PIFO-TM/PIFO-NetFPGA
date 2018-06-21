@@ -79,14 +79,17 @@ def make_pkts_meta_in(pcap_file, meta_file):
     return pkts_in, meta_in
 
 def check_pkts(pkts_out):
-    pkts_exp = rdpcap(PCAP_FILE)
-    pkts_exp = pkts_exp[0:NUM_PKTS]
+    pkts_in = rdpcap(NF1_PCAP_FILE)
+    max_len = max([len(p) for p in pkts_in])
 
-    for p_out, p_exp, i in zip(pkts_out, pkts_exp, range(len(pkts_out))):
-        if p_out != p_exp:
-            print 'WARNING: unexpected pkt -- index: {} -- pkt_len: {}'.format(i, len(p_out))
-            p_out.show()
-            print ''
+    max_plen = 0
+    for p in pkts_out:
+        if len(p) < 64:
+            print "ERROR: received pkt that is too small"
+        elif len(p) > max_len:
+            print "ERROR: received pkt that is too large"
+        max_plen = len(p) if len(p) > max_plen else max_plen
+    print 'INFO: max packet length = {}'.format(max_plen)
 
 def plot_stats(log_pkts, egress_link_rate):
     start_time = log_pkts[0].time
@@ -127,7 +130,7 @@ def test_sched_alg_demo(dut):
 
     # start reading for pkts
     num_pkts = len(nf1_pkts_in) + len(nf2_pkts_in)
-    pkt_slave_thread = cocotb.fork(pkt_slave.read_n_pkts(num_pkts))
+    pkt_slave_thread = cocotb.fork(pkt_slave.read_n_pkts(num_pkts, log_raw=True))
     input_logger_thread = cocotb.fork(input_logger.read_n_pkts(num_pkts, log_raw=True))
 
     # Send pkts and metadata in the HW sim
@@ -153,7 +156,7 @@ def test_sched_alg_demo(dut):
 
     print 'len(pkts_out) = {}'.format(len(pkts_out))
     print 'len(logged_pkts) = {}'.format(len(input_logger.pkts))
-#    check_pkts(pkts_out)
+    check_pkts(pkts_out)
 
     # Parse the logged pkts
     pkt_parser = LogPktParser()
