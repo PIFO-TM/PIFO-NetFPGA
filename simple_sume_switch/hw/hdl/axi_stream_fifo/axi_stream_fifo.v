@@ -272,8 +272,8 @@ module axi_stream_fifo
 
 //`ifdef COCOTB_SIM
 //initial begin
-//  $dumpfile ("rate_limiter_waveform.vcd");
-//  $dumpvars (0,rate_limiter);
+//  $dumpfile ("axi_stream_fifo_waveform.vcd");
+//  $dumpvars (0,axi_stream_fifo);
 //  #1 $display("Sim running...");
 //end
 //`endif
