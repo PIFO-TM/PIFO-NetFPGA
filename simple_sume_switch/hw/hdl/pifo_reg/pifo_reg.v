@@ -56,13 +56,13 @@ module pifo_reg
     begin
         for (j = 0; j < REG_WIDTH; j=j+1)
         begin
-            min_rank[0][j] = rank[j];
-            min_meta[0][j] = meta[j];
-            min_idx[0][j]  = j;
-            max_rank[0][j] = rank[j];
-            max_meta[0][j] = meta[j];
-            max_idx[0][j]  = j;
-            mvalid[0][j]   = valid[j];
+            min_rank[0][j] <= rank[j];
+            min_meta[0][j] <= meta[j];
+            min_idx[0][j]  <= j;
+            max_rank[0][j] <= rank[j];
+            max_meta[0][j] <= meta[j];
+            max_idx[0][j]  <= j;
+            mvalid[0][j]   <= valid[j];
         end
 
         for (i = 0; i < COMP_LVLS; i=i+1)
@@ -71,33 +71,33 @@ module pifo_reg
                 if (((min_rank[i][j] <= min_rank[i][j+1]) && (mvalid[i][j] == 1'b1) && (mvalid[i][j+1] == 1'b1)) ||
                     ((mvalid[i][j] == 1'b1) && (mvalid[i][j+1] !== 1'b1)))
                 begin
-                    min_rank[i+1][j/2] = min_rank[i][j];
-                    min_meta[i+1][j/2] = min_meta[i][j];
-                    min_idx[i+1][j/2]  = min_idx[i][j];
+                    min_rank[i+1][j/2] <= min_rank[i][j];
+                    min_meta[i+1][j/2] <= min_meta[i][j];
+                    min_idx[i+1][j/2]  <= min_idx[i][j];
                 end
                 else begin
-                    min_rank[i+1][j/2] = min_rank[i][j+1];
-                    min_meta[i+1][j/2] = min_meta[i][j+1];
-                    min_idx[i+1][j/2]  = min_idx[i][j+1];                      
+                    min_rank[i+1][j/2] <= min_rank[i][j+1];
+                    min_meta[i+1][j/2] <= min_meta[i][j+1];
+                    min_idx[i+1][j/2]  <= min_idx[i][j+1];                      
                 end
                 
                 if (((max_rank[i][j] > max_rank[i][j+1]) && (mvalid[i][j] == 1'b1) && (mvalid[i][j+1] == 1'b1)) ||
                     ((mvalid[i][j] == 1'b1) && (mvalid[i][j+1] !== 1'b1)))
                 begin
-                    max_rank[i+1][j/2] = max_rank[i][j];
-                    max_meta[i+1][j/2] = max_meta[i][j];
-                    max_idx[i+1][j/2]  = max_idx[i][j];
+                    max_rank[i+1][j/2] <= max_rank[i][j];
+                    max_meta[i+1][j/2] <= max_meta[i][j];
+                    max_idx[i+1][j/2]  <= max_idx[i][j];
                 end
                 else begin
-                    max_rank[i+1][j/2] = max_rank[i][j+1];
-                    max_meta[i+1][j/2] = max_meta[i][j+1];
-                    max_idx[i+1][j/2]  = max_idx[i][j+1];                      
+                    max_rank[i+1][j/2] <= max_rank[i][j+1];
+                    max_meta[i+1][j/2] <= max_meta[i][j+1];
+                    max_idx[i+1][j/2]  <= max_idx[i][j+1];                      
                 end
                 
                 if ((mvalid[i][j] == 1'b1) || (mvalid[i][j+1] == 1'b1))
-                    mvalid[i+1][j/2] = 1'b1;
+                    mvalid[i+1][j/2] <= 1'b1;
                 else
-                    mvalid[i+1][j/2] = 1'b0;
+                    mvalid[i+1][j/2] <= 1'b0;
             end
     end
 
